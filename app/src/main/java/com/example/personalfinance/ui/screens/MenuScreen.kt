@@ -1,0 +1,169 @@
+package com.example.personalfinance.ui.screens
+
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.*
+import androidx.navigation.NavController
+import com.example.personalfinance.ui.theme.*
+
+private data class MenuItem(
+    val id: String,
+    val name: String,
+    val icon: ImageVector,
+    val color: Color
+)
+
+@Composable
+fun MenuScreen(navController: NavController) {
+    val menuItems = listOf(
+        MenuItem("friends",   "친구",     Icons.Rounded.People,      Blue400),
+        MenuItem("shop",      "상점",     Icons.Rounded.Storefront,   CategoryShopping),
+        MenuItem("gacha",     "가챠",     Icons.Rounded.AutoAwesome,  CategoryCulture),
+        MenuItem("inventory", "인벤토리", Icons.Rounded.Inventory2,   CategoryFood),
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .verticalScroll(rememberScrollState())
+    ) {
+
+        // ── Header ────────────────────────────────────────────────────────────
+        Row(
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.Rounded.Close, null, tint = Gray600)
+            }
+            Text("메뉴", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.width(48.dp))
+        }
+        HorizontalDivider(color = Gray100)
+
+        // ── Profile ───────────────────────────────────────────────────────────
+        Row(
+            modifier          = Modifier.fillMaxWidth().padding(24.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier         = Modifier
+                    .size(64.dp)
+                    .background(Brush.linearGradient(listOf(Blue50, Purple50)), CircleShape),
+                contentAlignment = Alignment.Center
+            ) { Text("👤", fontSize = 28.sp) }
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text("사용자님", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Lv.3 • 초보 모험가",
+                    style    = MaterialTheme.typography.bodyMedium,
+                    color    = Gray500,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+        HorizontalDivider(color = Gray100)
+
+        // ── Menu Items ────────────────────────────────────────────────────────
+        Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
+            menuItems.forEach { item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 5.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Gray50)
+                        .clickable { }
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier         = Modifier.size(48.dp).background(item.color.copy(0.18f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(item.icon, null, tint = item.color, modifier = Modifier.size(24.dp))
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Text(item.name, style = MaterialTheme.typography.titleMedium)
+                    }
+                    Icon(Icons.Rounded.ChevronRight, null, tint = Gray400)
+                }
+            }
+        }
+
+        // ── Settings ──────────────────────────────────────────────────────────
+        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+            Text(
+                "설정",
+                style      = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color      = Gray500,
+                modifier   = Modifier.padding(bottom = 10.dp)
+            )
+            listOf("알림 설정", "프로필 수정", "앱 정보").forEach { label ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, Gray200, RoundedCornerShape(16.dp))
+                        .clickable { }
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Text(label, style = MaterialTheme.typography.bodyLarge)
+                    Icon(Icons.Rounded.ChevronRight, null, tint = Gray400)
+                }
+            }
+        }
+
+        // ── My Stats ──────────────────────────────────────────────────────────
+        Column(modifier = Modifier.padding(24.dp)) {
+            Text(
+                "나의 통계",
+                style      = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color      = Gray500,
+                modifier   = Modifier.padding(bottom = 12.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Brush.linearGradient(listOf(Blue50, Purple50)))
+                    .padding(24.dp)
+            ) {
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    listOf("3" to "레벨", "450" to "XP", "12" to "아이템").forEach { (value, label) ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text(label, style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

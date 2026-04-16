@@ -1,0 +1,228 @@
+package com.example.personalfinance.ui.screens
+
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.example.personalfinance.navigation.Screen
+import com.example.personalfinance.ui.components.PixelCharacter
+import com.example.personalfinance.ui.theme.*
+
+@Composable
+fun HomeScreen(navController: NavController) {
+    // ── State ────────────────────────────────────────────────────────────────
+    val currentLevel       = 3
+    val currentXP          = 450
+    val nextLevelXP        = 600
+    val xpProgress         = currentXP.toFloat() / nextLevelXP
+    val thisMonthSpending  = 1_248_000
+    val lastMonthChange    = -12
+    val topCategory        = "음식"
+
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+
+    // ── Layout ───────────────────────────────────────────────────────────────
+    Box(modifier = Modifier.fillMaxSize()) {
+
+        // Scrollable content
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(listOf(Color.White, Gray50)))
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 88.dp)
+        ) {
+
+            // Header
+            Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp)) {
+                Text(
+                    text  = "2026년 4월 16일",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Gray500
+                )
+                Text(
+                    text     = "안녕하세요 👋",
+                    style    = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            // Character section (fade + scale in)
+            AnimatedVisibility(
+                visible = visible,
+                enter   = scaleIn(initialScale = 0.8f, animationSpec = tween(500)) + fadeIn(tween(500))
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier            = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    PixelCharacter(level = currentLevel, job = "beginner")
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Level badge
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                Brush.horizontalGradient(listOf(Blue50, Purple50)),
+                                RoundedCornerShape(50)
+                            )
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text       = "Lv.$currentLevel",
+                            style      = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = Blue500
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // XP progress bar
+                    LinearProgressIndicator(
+                        progress     = { xpProgress },
+                        modifier     = Modifier
+                            .width(160.dp)
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color        = Blue500,
+                        trackColor   = Gray100
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text  = "$currentXP / $nextLevelXP XP",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Gray400
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Spending card (slide up + fade in)
+            AnimatedVisibility(
+                visible = visible,
+                enter   = slideInVertically(tween(500, 200)) { it / 3 } + fadeIn(tween(500, 200))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 24.dp)
+                        .fillMaxWidth()
+                        .shadow(8.dp, RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.linearGradient(listOf(Blue50, Purple50)),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(24.dp)
+                ) {
+                    Column {
+                        Text(
+                            text  = "이번 달 지출",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Gray600
+                        )
+                        Text(
+                            text       = "₩${String.format("%,d", thisMonthSpending)}",
+                            style      = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier   = Modifier.padding(top = 8.dp, bottom = 20.dp)
+                        )
+
+                        // Insight row 1 — monthly change
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+                            Box(
+                                modifier          = Modifier.size(36.dp).background(Color(0xFFDCFCE7), CircleShape),
+                                contentAlignment  = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.TrendingDown, null, tint = GreenSuccess, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text("지난달 대비 ", style = MaterialTheme.typography.bodyMedium, color = Gray700)
+                            Text(
+                                "${lastMonthChange}%",
+                                style      = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color      = GreenSuccess
+                            )
+                        }
+
+                        // Insight row 2 — top category
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier          = Modifier.size(36.dp).background(Color(0xFFFFF7ED), CircleShape),
+                                contentAlignment  = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.Restaurant, null, tint = OrangeWarning, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text("가장 많이 사용한 카테고리: ", style = MaterialTheme.typography.bodyMedium, color = Gray700)
+                            Text(topCategory, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Bottom Navigation ─────────────────────────────────────────────────
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .shadow(12.dp)
+                .background(Color.White)
+                .padding(horizontal = 32.dp, vertical = 16.dp)
+        ) {
+            Row(
+                modifier             = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment   = Alignment.CenterVertically
+            ) {
+                // Ledger
+                IconButton(onClick = { navController.navigate(Screen.Ledger.route) }) {
+                    Icon(Icons.Rounded.MenuBook, contentDescription = "가계부", tint = Gray600)
+                }
+
+                // FAB — add expense
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .shadow(12.dp, CircleShape)
+                        .background(
+                            Brush.linearGradient(listOf(Blue500, Purple500)),
+                            CircleShape
+                        )
+                        .clip(CircleShape)
+                        .clickable { navController.navigate(Screen.NewRecord.route) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = "추가", tint = Color.White, modifier = Modifier.size(28.dp))
+                }
+
+                // Menu
+                IconButton(onClick = { navController.navigate(Screen.Menu.route) }) {
+                    Icon(Icons.Rounded.Menu, contentDescription = "메뉴", tint = Gray600)
+                }
+            }
+        }
+    }
+}
