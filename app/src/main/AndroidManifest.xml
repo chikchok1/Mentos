@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
+        android:name=".MentosApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.PersonalFinanceApp">
         <activity
             android:name=".MainActivity"
@@ -15,6 +19,22 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Kakao AuthCodeHandlerActivity -->
+        <activity 
+            android:name="com.kakao.sdk.auth.AuthCodeHandlerActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <!-- Redirect URI: "kakao{YOUR_KAKAO_APP_KEY}://oauth" -->
+                <!-- TODO: 아래 YOUR_KAKAO_APP_KEY 부분을 실제 앱 키로 치환하세요. (예: kakao1234567890abcdef) -->
+                <data android:host="oauth"
+                      android:scheme="\${KAKAO_REDIRECT_SCHEME}" />
             </intent-filter>
         </activity>
     </application>

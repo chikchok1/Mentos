@@ -1,6 +1,15 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+val properties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    properties.load(FileInputStream(localPropertiesFile))
 }
 
 android {
@@ -18,6 +27,15 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        
+        val kakaoKey = properties.getProperty("KAKAO_NATIVE_APP_KEY") ?: "\"\""
+        val kakaoScheme = properties.getProperty("KAKAO_REDIRECT_SCHEME") ?: "\"\""
+        val googleKey = properties.getProperty("GOOGLE_WEB_CLIENT_ID") ?: "\"\""
+
+        buildConfigField("String", "KAKAO_NATIVE_APP_KEY", kakaoKey)
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", googleKey)
+        
+        manifestPlaceholders["KAKAO_REDIRECT_SCHEME"] = kakaoScheme.replace("\"", "")
     }
 
     buildTypes {
@@ -41,6 +59,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -55,6 +74,22 @@ android {
 }
 
 dependencies {
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Kakao Login
+    implementation("com.kakao.sdk:v2-user:2.20.1")
+
+    // Google Login (Credential Manager)
+    implementation("androidx.credentials:credentials:1.2.2")
+    implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.0")
+
+    // Network (Retrofit & OkHttp)
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
     val composeBom = platform("androidx.compose:compose-bom:2024.04.01")
     implementation(composeBom)
 

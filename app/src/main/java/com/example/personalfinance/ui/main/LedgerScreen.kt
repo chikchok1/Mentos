@@ -1,4 +1,4 @@
-package com.example.personalfinance.ui.screens
+package com.example.personalfinance.ui.main
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*

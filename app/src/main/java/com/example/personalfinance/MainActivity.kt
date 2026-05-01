@@ -12,8 +12,12 @@ import com.example.personalfinance.navigation.AppNavigation
 import com.example.personalfinance.ui.theme.PersonalFinanceTheme
 
 class MainActivity : ComponentActivity() {
+    private lateinit var tokenManager: com.example.personalfinance.data.TokenManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        tokenManager = com.example.personalfinance.data.TokenManager(this)
+        
         enableEdgeToEdge()
         setContent {
             PersonalFinanceTheme {
@@ -21,7 +25,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color    = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation()
+                    AppNavigation(tokenManager = tokenManager)
                 }
             }
         }

@@ -1,4 +1,4 @@
-package com.example.personalfinance.ui.screens
+package com.example.personalfinance.ui.main
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -27,7 +27,7 @@ private data class MenuItem(
 )
 
 @Composable
-fun MenuScreen(navController: NavController) {
+fun MenuScreen(navController: NavController, onLogout: () -> Unit = {}) {
     val menuItems = listOf(
         MenuItem("friends",   "친구",     Icons.Rounded.People,      Blue400),
         MenuItem("shop",      "상점",     Icons.Rounded.Storefront,   CategoryShopping),
@@ -133,6 +133,22 @@ fun MenuScreen(navController: NavController) {
                     Text(label, style = MaterialTheme.typography.bodyLarge)
                     Icon(Icons.Rounded.ChevronRight, null, tint = Gray400)
                 }
+            }
+            
+            // 로그아웃 버튼
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 4.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFFFFF0F0))
+                    .clickable { onLogout() }
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Text("로그아웃", style = MaterialTheme.typography.bodyLarge, color = Color(0xFFD32F2F))
+                Icon(Icons.Rounded.Logout, null, tint = Color(0xFFD32F2F))
             }
         }
 
