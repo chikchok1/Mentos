@@ -26,11 +26,15 @@ import com.example.personalfinance.ui.theme.*
 @Composable
 fun HomeScreen(navController: NavController) {
     // ── State ────────────────────────────────────────────────────────────────
-    val currentLevel       = 3
-    val currentXP          = 450
-    val nextLevelXP        = 600
-    val xpProgress         = currentXP.toFloat() / nextLevelXP
-    val thisMonthSpending  = 1_248_000
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { com.example.personalfinance.data.UserStatsStore.getInstance(context) }
+    val userStats by store.statsFlow.collectAsState()
+
+    val currentLevel       = userStats.currentLevel
+    val currentXP          = userStats.currentXP
+    val nextLevelXP        = userStats.nextLevelXP
+    val xpProgress         = if (nextLevelXP > 0) currentXP.toFloat() / nextLevelXP else 0f
+    val thisMonthSpending  = userStats.thisMonthSpending
     val lastMonthChange    = -12
     val topCategory        = "음식"
 
