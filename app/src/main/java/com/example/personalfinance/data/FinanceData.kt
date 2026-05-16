@@ -59,12 +59,20 @@ object SampleData {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fun categoryEmoji(name: String): String = when (name) {
+    // 기존 더미 데이터용 이름
     "음식" -> "🍽️"
     "쇼핑" -> "🛍️"
     "게임" -> "🎮"
     "문화" -> "🎬"
     "뷰티" -> "✨"
-    else  -> "📦"
+    // ExpenseCategoryClassifier 카테고리 표시명
+    "식비/카페"    -> "🍽️"
+    "생활/마트"    -> "🛒"
+    "쇼핑/온라인"  -> "🛍️"
+    "문화/여가"    -> "🎬"
+    "고정비/구독"  -> "📱"
+    "건강/의료"    -> "💊"
+    else           -> "📦"
 }
 
 fun formatWon(amount: Int): String = "₩${String.format("%,d", amount)}"

@@ -30,16 +30,28 @@ fun HomeScreen(navController: NavController) {
     val store = remember { com.example.personalfinance.data.UserStatsStore.getInstance(context) }
     val userStats by store.statsFlow.collectAsState()
 
-    val currentLevel       = userStats.currentLevel
-    val currentXP          = userStats.currentXP
-    val nextLevelXP        = userStats.nextLevelXP
-    val xpProgress         = if (nextLevelXP > 0) currentXP.toFloat() / nextLevelXP else 0f
-    val thisMonthSpending  = userStats.thisMonthSpending
-    val lastMonthChange    = -12
-    val topCategory        = "음식"
+    val currentLevel      = userStats.currentLevel
+    val currentXP         = userStats.currentXP
+    val nextLevelXP       = userStats.nextLevelXP
+    val xpProgress        = if (nextLevelXP > 0) {
+        (currentXP.toFloat() / nextLevelXP).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val thisMonthSpending = userStats.thisMonthSpending
+    val lastMonthChange   = -12
+    val topCategory       = userStats.topCategory
 
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
+
+    // 시스템 바 inset
+    val systemBarsInsets = WindowInsets.systemBars
+    val bottomInset = with(androidx.compose.ui.platform.LocalDensity.current) {
+        systemBarsInsets.getBottom(this).toDp()
+    }
+    // 바텀 네비 바 전체 높이 = 콘텐츠(16+56+16) + 시스템 inset
+    val navBarHeight = 88.dp + bottomInset
 
     // ── Layout ───────────────────────────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
@@ -50,7 +62,7 @@ fun HomeScreen(navController: NavController) {
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(Color.White, Gray50)))
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 88.dp)
+                .padding(bottom = navBarHeight)
         ) {
 
             // Header
@@ -103,13 +115,13 @@ fun HomeScreen(navController: NavController) {
 
                     // XP progress bar
                     LinearProgressIndicator(
-                        progress     = { xpProgress },
-                        modifier     = Modifier
+                        progress   = { xpProgress },
+                        modifier   = Modifier
                             .width(160.dp)
                             .height(8.dp)
                             .clip(RoundedCornerShape(4.dp)),
-                        color        = Blue500,
-                        trackColor   = Gray100
+                        color      = Blue500,
+                        trackColor = Gray100
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -123,7 +135,7 @@ fun HomeScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Spending card (slide up + fade in)
+            // Spending card (slide up + fade in) — 탭하면 가계부로 이동
             AnimatedVisibility(
                 visible = visible,
                 enter   = slideInVertically(tween(500, 200)) { it / 3 } + fadeIn(tween(500, 200))
@@ -133,18 +145,29 @@ fun HomeScreen(navController: NavController) {
                         .padding(horizontal = 24.dp)
                         .fillMaxWidth()
                         .shadow(8.dp, RoundedCornerShape(20.dp))
-                        .background(
-                            Brush.linearGradient(listOf(Blue50, Purple50)),
-                            RoundedCornerShape(20.dp)
-                        )
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Brush.linearGradient(listOf(Blue50, Purple50)))
+                        .clickable { navController.navigate(Screen.Ledger.route) }
                         .padding(24.dp)
                 ) {
                     Column {
-                        Text(
-                            text  = "이번 달 지출",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Gray600
-                        )
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment     = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text  = "이번 달 지출",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Gray600
+                            )
+                            Icon(
+                                imageVector        = Icons.Rounded.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint               = Gray400,
+                                modifier           = Modifier.size(20.dp)
+                            )
+                        }
                         Text(
                             text       = "₩${String.format("%,d", thisMonthSpending)}",
                             style      = MaterialTheme.typography.headlineLarge,
@@ -155,8 +178,8 @@ fun HomeScreen(navController: NavController) {
                         // Insight row 1 — monthly change
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
                             Box(
-                                modifier          = Modifier.size(36.dp).background(Color(0xFFDCFCE7), CircleShape),
-                                contentAlignment  = Alignment.Center
+                                modifier         = Modifier.size(36.dp).background(Color(0xFFDCFCE7), CircleShape),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Rounded.TrendingDown, null, tint = GreenSuccess, modifier = Modifier.size(18.dp))
                             }
@@ -173,8 +196,8 @@ fun HomeScreen(navController: NavController) {
                         // Insight row 2 — top category
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
-                                modifier          = Modifier.size(36.dp).background(Color(0xFFFFF7ED), CircleShape),
-                                contentAlignment  = Alignment.Center
+                                modifier         = Modifier.size(36.dp).background(Color(0xFFFFF7ED), CircleShape),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Rounded.Restaurant, null, tint = OrangeWarning, modifier = Modifier.size(18.dp))
                             }
@@ -194,12 +217,13 @@ fun HomeScreen(navController: NavController) {
                 .fillMaxWidth()
                 .shadow(12.dp)
                 .background(Color.White)
-                .padding(horizontal = 32.dp, vertical = 16.dp)
+                // 콘텐츠 패딩은 위쪽만, 하단은 시스템 inset만큼 추가
+                .padding(start = 32.dp, end = 32.dp, top = 16.dp, bottom = 16.dp + bottomInset)
         ) {
             Row(
-                modifier             = Modifier.fillMaxWidth(),
+                modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment   = Alignment.CenterVertically
+                verticalAlignment     = Alignment.CenterVertically
             ) {
                 // Ledger
                 IconButton(onClick = { navController.navigate(Screen.Ledger.route) }) {

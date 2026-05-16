@@ -4,6 +4,7 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.example.personalfinance.data.ExpenseCategoryClassifier
 
 class CardNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
@@ -12,24 +13,47 @@ class CardNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        if (sbn.packageName != packageName) {
-            Log.d(TAG, "Ignoring non-test notification.")
+        if (!CardNotificationSourcePolicy.isSupported(sbn.packageName, packageName)) {
+            Log.d(TAG, "Ignoring unsupported notification package=${sbn.packageName}")
             return
         }
 
         val notification = sbn.notification ?: return
-        val title = notification.extractTitle()
-        val text = notification.extractText()
-        val result = CardNotificationParser.parse(title = title, text = text)
-
-        CardNotificationDebugStore.update(
-            sourcePackage = sbn.packageName,
-            title = title,
-            text = text,
-            result = result
+        val content = notification.extractContent()
+        val result = runCatching {
+            CardNotificationParser.parse(title = content.title, text = content.text)
+        }.getOrElse { error ->
+            Log.w(TAG, "Failed to parse supported payment notification.", error)
+            CardNotificationParseResult(
+                amount = null,
+                merchantName = "",
+                transactionDateTime = null,
+                rawTitle = content.title,
+                rawText = content.text,
+                parseStatus = CardNotificationParseStatus.FAILED
+            )
+        }
+        val notificationType = if (
+            sbn.packageName == packageName &&
+            result.parseStatus == CardNotificationParseStatus.SUCCESS
+        ) {
+            PaymentNotificationType.APPROVED
+        } else {
+            PaymentNotificationClassifier.classify(
+                title = content.title,
+                text = content.text
+            )
+        }
+        val category = ExpenseCategoryClassifier.classify(
+            merchantName = result.merchantName,
+            rawText = content.text
         )
-        
-        if (result.parseStatus == CardNotificationParseStatus.SUCCESS && result.amount != null) {
+
+        val handlingStatus = if (
+            result.parseStatus == CardNotificationParseStatus.SUCCESS &&
+            result.amount != null &&
+            notificationType == PaymentNotificationType.APPROVED
+        ) {
             val processedKey = ProcessedNotificationKey(
                 packageName = sbn.packageName,
                 postTime = sbn.postTime,
@@ -39,34 +63,81 @@ class CardNotificationListenerService : NotificationListenerService() {
 
             if (markProcessed(processedKey)) {
                 val store = com.example.personalfinance.data.UserStatsStore.getInstance(this)
-                store.addExpense(result.amount)
-                Log.i(TAG, "Added expense ${result.amount} to UserStatsStore")
+                store.addExpense(result.amount, category)
+                Log.i(TAG, "Added expense ${result.amount} to UserStatsStore with category=$category")
+                CardNotificationHandlingStatus.APPROVED_RECORDED
             } else {
                 Log.i(TAG, "Ignoring duplicate parsed payment notification: $processedKey")
+                CardNotificationHandlingStatus.DUPLICATE_IGNORED
+            }
+        } else {
+            when {
+                notificationType == PaymentNotificationType.CANCELED -> {
+                    Log.i(TAG, "Ignoring canceled payment notification package=${sbn.packageName}")
+                    CardNotificationHandlingStatus.CANCELED_IGNORED
+                }
+                result.parseStatus == CardNotificationParseStatus.FAILED || result.amount == null -> {
+                    Log.i(TAG, "Payment notification parsing failed package=${sbn.packageName}")
+                    CardNotificationHandlingStatus.PARSE_FAILED
+                }
+                else -> {
+                    Log.i(TAG, "Payment notification needs review package=${sbn.packageName}")
+                    CardNotificationHandlingStatus.NEEDS_REVIEW
+                }
             }
         }
 
+        CardNotificationDebugStore.update(
+            sourcePackage = sbn.packageName,
+            title = content.title,
+            text = content.text,
+            result = result,
+            category = category,
+            notificationType = notificationType,
+            handlingStatus = handlingStatus
+        )
+
         Log.i(
             TAG,
-            "Parsed test notification: status=${result.parseStatus}, " +
+            "Handled payment notification: handlingStatus=$handlingStatus, " +
+                "notificationType=$notificationType, parseStatus=${result.parseStatus}, " +
                 "amount=${result.amount}, merchant=${result.merchantName}, " +
-                "transactionDateTime=${result.transactionDateTime}, title=$title, text=$text"
+                "category=$category, transactionDateTime=${result.transactionDateTime}"
         )
     }
 
-    private fun Notification.extractTitle(): String =
-        extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+    private fun Notification.extractContent(): ExtractedNotificationContent {
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val parts = LinkedHashSet<String>()
 
-    private fun Notification.extractText(): String {
-        val directText = extras.getCharSequence(Notification.EXTRA_TEXT)
-            ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
-            ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)
+        fun addPart(value: CharSequence?) {
+            val text = value?.toString()?.trim().orEmpty()
+            if (text.isNotBlank()) {
+                parts.add(text)
+            }
+        }
 
-        if (directText != null) return directText.toString()
+        addPart(extras.getCharSequence(Notification.EXTRA_TITLE))
+        addPart(extras.getCharSequence(Notification.EXTRA_TITLE_BIG))
+        addPart(extras.getCharSequence(Notification.EXTRA_TEXT))
+        addPart(extras.getCharSequence(Notification.EXTRA_BIG_TEXT))
+        addPart(extras.getCharSequence(Notification.EXTRA_SUB_TEXT))
+        addPart(extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT))
+        addPart(extras.getCharSequence(Notification.EXTRA_INFO_TEXT))
+        addPart(tickerText)
+        extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+            ?.forEach { line -> addPart(line) }
 
-        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
-        return lines?.joinToString(separator = " ") { it.toString() }.orEmpty()
+        return ExtractedNotificationContent(
+            title = title,
+            text = parts.joinToString(separator = " ")
+        )
     }
+
+    private data class ExtractedNotificationContent(
+        val title: String,
+        val text: String
+    )
 
     private data class ProcessedNotificationKey(
         val packageName: String,

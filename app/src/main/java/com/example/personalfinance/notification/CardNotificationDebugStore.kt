@@ -13,13 +13,19 @@ object CardNotificationDebugStore {
         sourcePackage: String,
         title: String,
         text: String,
-        result: CardNotificationParseResult
+        result: CardNotificationParseResult,
+        category: String,
+        notificationType: PaymentNotificationType,
+        handlingStatus: CardNotificationHandlingStatus
     ) {
         _latestResult.value = CardNotificationDebugEntry(
             sourcePackage = sourcePackage,
             title = title,
             text = text,
             result = result,
+            category = category,
+            notificationType = notificationType,
+            handlingStatus = handlingStatus,
             receivedAt = LocalDateTime.now()
         )
     }
@@ -30,5 +36,8 @@ data class CardNotificationDebugEntry(
     val title: String,
     val text: String,
     val result: CardNotificationParseResult,
+    val category: String,
+    val notificationType: PaymentNotificationType,
+    val handlingStatus: CardNotificationHandlingStatus,
     val receivedAt: LocalDateTime
 )

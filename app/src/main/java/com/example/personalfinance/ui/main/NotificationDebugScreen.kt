@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
+import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.notification.CardNotificationDebugEntry
 import com.example.personalfinance.notification.CardNotificationDebugStore
 import com.example.personalfinance.notification.SamplePaymentNotification
@@ -235,8 +236,12 @@ private fun LatestResultPanel(entry: CardNotificationDebugEntry?) {
             return@Column
         }
 
-        ResultRow("상태", entry.result.parseStatus.name)
+        ResultRow("처리 상태", entry.handlingStatus.name)
+        ResultRow("알림 유형", entry.notificationType.name)
+        ResultRow("파싱 상태", entry.result.parseStatus.name)
         ResultRow("금액", entry.result.amount?.let { "%,d".format(it) } ?: "-")
+        ResultRow("획득 XP", entry.result.amount?.let { UserStatsCalculator.calculateEarnedXP(it).toString() } ?: "-")
+        ResultRow("카테고리", entry.category)
         ResultRow("가맹점", entry.result.merchantName.ifBlank { "-" })
         ResultRow("거래시각", entry.result.transactionDateTime?.toString() ?: "-")
         ResultRow("알림 제목", entry.title.ifBlank { "-" })

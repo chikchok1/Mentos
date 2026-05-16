@@ -22,20 +22,75 @@ import androidx.navigation.NavController
 import com.example.personalfinance.data.*
 import com.example.personalfinance.ui.theme.*
 
+// ── 카테고리 이름 매핑 (ExpenseCategoryClassifier → 화면 표시용) ───────────────────
+
+private fun classifierCategoryToDisplayName(category: String): String = when (category) {
+    ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE        -> "식비/카페"
+    ExpenseCategoryClassifier.CATEGORY_LIVING_MART      -> "생활/마트"
+    ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE  -> "쇼핑/온라인"
+    ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE  -> "문화/여가"
+    ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> "고정비/구독"
+    ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL   -> "건강/의료"
+    else                                                 -> "기타"
+}
+
+private fun categoryColorFor(category: String): Color = when (category) {
+    ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE        -> CategoryFood
+    ExpenseCategoryClassifier.CATEGORY_LIVING_MART      -> CategoryShopping
+    ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE  -> CategoryGame
+    ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE  -> CategoryCulture
+    ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> CategoryBeauty
+    ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL   -> Color(0xFF34D399)
+    else                                                 -> CategoryOther
+}
+
+private fun categoryEmojiForClassifier(category: String): String = when (category) {
+    ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE        -> "🍽️"
+    ExpenseCategoryClassifier.CATEGORY_LIVING_MART      -> "🛒"
+    ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE  -> "🛍️"
+    ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE  -> "🎬"
+    ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> "📱"
+    ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL   -> "💊"
+    else                                                 -> "📦"
+}
+
+// ── UserStats → CategoryData 변환 ────────────────────────────────────────────
+
+private fun buildCategoriesFromStats(categorySpending: Map<String, Long>): List<CategoryData> {
+    val total = categorySpending.values.sum().coerceAtLeast(1L)
+    return categorySpending
+        .filter { it.value > 0L }
+        .map { (category, amount) ->
+            CategoryData(
+                name       = classifierCategoryToDisplayName(category),
+                value      = amount.toInt(),
+                count      = 0,          // 현재 거래 건수 정보 없음
+                percentage = ((amount.toFloat() / total) * 100).toInt(),
+                color      = categoryColorFor(category)
+            )
+        }
+        .sortedByDescending { it.value }
+}
+
 @Composable
 fun LedgerScreen(navController: NavController) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store   = remember { UserStatsStore.getInstance(context) }
+    val stats   by store.statsFlow.collectAsState()
+
     var selectedTab      by remember { mutableStateOf(0) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var budgetEnabled    by remember { mutableStateOf(true) }
 
-    val categories   = SampleData.categories
-    val transactions = SampleData.transactions
+    // ── 실제 파싱 데이터에서 빌드 ────────────────────────────────────────────
+    val categories   = buildCategoriesFromStats(stats.categorySpending)
+    val transactions = SampleData.transactions   // 거래 내역은 현재 별도 저장 구조 없음
     val monthlyData  = SampleData.monthly
 
-    val totalSpending         = categories.sumOf { it.value }
-    val monthlyBudget         = 1_500_000
-    val budgetUsedPercentage  = totalSpending.toFloat() / monthlyBudget * 100f
-    val remainingBudget       = monthlyBudget - totalSpending
+    val totalSpending        = stats.thisMonthSpending.toInt()
+    val monthlyBudget        = 1_500_000
+    val budgetUsedPercentage = totalSpending.toFloat() / monthlyBudget * 100f
+    val remainingBudget      = monthlyBudget - totalSpending
 
     val filteredTransactions = if (selectedCategory != null)
         transactions.filter { it.category == selectedCategory }
@@ -99,9 +154,15 @@ fun LedgerScreen(navController: NavController) {
                 .padding(bottom = 24.dp)
         ) {
             when (selectedTab) {
-                0 -> LedgerTab(categories, filteredTransactions, selectedCategory) { cat ->
-                    selectedCategory = if (selectedCategory == cat) null else cat
-                }
+                0 -> LedgerTab(
+                    categories          = categories,
+                    transactions        = filteredTransactions,
+                    selectedCategory    = selectedCategory,
+                    totalSpending       = totalSpending,
+                    onCategoryClick     = { cat ->
+                        selectedCategory = if (selectedCategory == cat) null else cat
+                    }
+                )
                 1 -> TrendsTab(monthlyData)
                 2 -> BudgetTab(
                     budgetEnabled, { budgetEnabled = it },
@@ -119,9 +180,37 @@ private fun LedgerTab(
     categories: List<CategoryData>,
     transactions: List<Transaction>,
     selectedCategory: String?,
+    totalSpending: Int,
     onCategoryClick: (String) -> Unit
 ) {
-    val total = categories.sumOf { it.value }
+    // 데이터가 없을 때 안내 화면
+    if (categories.isEmpty()) {
+        Box(
+            modifier         = Modifier.fillMaxWidth().padding(48.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("📊", fontSize = 48.sp)
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "아직 지출 내역이 없어요",
+                    style     = MaterialTheme.typography.bodyLarge,
+                    color     = Gray500,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "카드 결제 알림을 받으면\n자동으로 기록돼요",
+                    style     = MaterialTheme.typography.bodySmall,
+                    color     = Gray400,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        return
+    }
+
+    val total = totalSpending.toLong().coerceAtLeast(1L)
 
     // Donut chart
     Box(
@@ -197,10 +286,10 @@ private fun LedgerTab(
     Spacer(Modifier.height(20.dp))
     Text(
         "카테고리별 내역",
-        style    = MaterialTheme.typography.bodySmall,
+        style      = MaterialTheme.typography.bodySmall,
         fontWeight = FontWeight.SemiBold,
-        color    = Gray600,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        color      = Gray600,
+        modifier   = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
     )
     categories.forEach { cat ->
         Row(
@@ -221,47 +310,51 @@ private fun LedgerTab(
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text(cat.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                    Text("${cat.count}건", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                    if (cat.count > 0) {
+                        Text("${cat.count}건", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                    }
                 }
             }
             Text(formatWon(cat.value), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
     }
 
-    // Transaction list
-    Spacer(Modifier.height(12.dp))
-    Text(
-        if (selectedCategory != null) "${selectedCategory} 내역" else "전체 내역",
-        style      = MaterialTheme.typography.bodySmall,
-        fontWeight = FontWeight.SemiBold,
-        color      = Gray600,
-        modifier   = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-    )
-    transactions.forEach { tx ->
-        val catColor = SampleData.categories.find { it.name == tx.category }?.color ?: Gray400
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 4.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .border(1.dp, Gray100, RoundedCornerShape(16.dp))
-                .background(Color.White)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment     = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier         = Modifier.size(40.dp).background(catColor.copy(0.2f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) { Text(categoryEmoji(tx.category), fontSize = 18.sp) }
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(tx.store, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                    Text(tx.date,  style = MaterialTheme.typography.bodySmall,  color = Gray500)
+    // Transaction list (거래 내역이 있을 때만)
+    if (transactions.isNotEmpty()) {
+        Spacer(Modifier.height(12.dp))
+        Text(
+            if (selectedCategory != null) "${selectedCategory} 내역" else "전체 내역",
+            style      = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color      = Gray600,
+            modifier   = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        transactions.forEach { tx ->
+            val catColor = SampleData.categories.find { it.name == tx.category }?.color ?: Gray400
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, Gray100, RoundedCornerShape(16.dp))
+                    .background(Color.White)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier         = Modifier.size(40.dp).background(catColor.copy(0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) { Text(categoryEmoji(tx.category), fontSize = 18.sp) }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(tx.store, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Text(tx.date,  style = MaterialTheme.typography.bodySmall,  color = Gray500)
+                    }
                 }
+                Text(formatWon(tx.amount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
-            Text(formatWon(tx.amount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -279,7 +372,6 @@ private fun TrendsTab(monthlyData: List<com.example.personalfinance.data.Monthly
             modifier   = Modifier.padding(bottom = 16.dp)
         )
 
-        // Bar chart drawn with Canvas
         val maxAmount = monthlyData.maxOf { it.amount }.toFloat()
         Row(
             modifier              = Modifier.fillMaxWidth().height(200.dp),
@@ -334,7 +426,6 @@ private fun BudgetTab(
     categories: List<CategoryData>
 ) {
     Column(modifier = Modifier.padding(24.dp)) {
-        // Budget tracker card
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -364,9 +455,9 @@ private fun BudgetTab(
                     Text("월 예산", style = MaterialTheme.typography.bodySmall, color = Gray500)
                     Text(
                         formatWon(monthlyBudget),
-                        style     = MaterialTheme.typography.headlineMedium,
+                        style      = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        modifier  = Modifier.padding(top = 4.dp)
+                        modifier   = Modifier.padding(top = 4.dp)
                     )
 
                     Spacer(Modifier.height(16.dp))
@@ -379,7 +470,7 @@ private fun BudgetTab(
                     }
                     Spacer(Modifier.height(8.dp))
                     LinearProgressIndicator(
-                        progress   = { budgetUsedPercentage / 100f },
+                        progress   = { (budgetUsedPercentage / 100f).coerceIn(0f, 1f) },
                         modifier   = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)),
                         color      = Blue500,
                         trackColor = Gray200
@@ -421,54 +512,55 @@ private fun BudgetTab(
             }
         }
 
-        Spacer(Modifier.height(24.dp))
+        if (categories.isNotEmpty()) {
+            Spacer(Modifier.height(24.dp))
 
-        // Per-category budgets
-        Text(
-            "카테고리별 예산",
-            style      = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
-            color      = Gray600,
-            modifier   = Modifier.padding(bottom = 12.dp)
-        )
-        categories.take(4).forEach { cat ->
-            val catBudget   = monthlyBudget * (cat.percentage / 100f)
-            val catProgress = (cat.value / catBudget).coerceIn(0f, 1f)
+            Text(
+                "카테고리별 예산",
+                style      = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color      = Gray600,
+                modifier   = Modifier.padding(bottom = 12.dp)
+            )
+            categories.take(4).forEach { cat ->
+                val catBudget   = monthlyBudget * (cat.percentage / 100f)
+                val catProgress = if (catBudget > 0) (cat.value / catBudget).coerceIn(0f, 1f) else 0f
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Gray50)
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Gray50)
+                        .padding(16.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier         = Modifier.size(32.dp).background(cat.color.copy(0.2f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) { Text(categoryEmoji(cat.name), fontSize = 14.sp) }
-                        Spacer(Modifier.width(8.dp))
-                        Text(cat.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment     = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier         = Modifier.size(32.dp).background(cat.color.copy(0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) { Text(categoryEmoji(cat.name), fontSize = 14.sp) }
+                            Spacer(Modifier.width(8.dp))
+                            Text(cat.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        }
+                        Text(
+                            "${formatWon(cat.value)} / ${formatWon(catBudget.toInt())}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Gray500
+                        )
                     }
-                    Text(
-                        "${formatWon(cat.value)} / ${formatWon(catBudget.toInt())}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Gray500
+                    Spacer(Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress   = { catProgress },
+                        modifier   = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                        color      = cat.color,
+                        trackColor = Gray200
                     )
                 }
-                Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(
-                    progress   = { catProgress },
-                    modifier   = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                    color      = cat.color,
-                    trackColor = Gray200
-                )
             }
         }
     }
