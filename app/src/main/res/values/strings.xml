@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">가계부 RPG</string>
+    <string name="card_notification_listener_service_label">Mentos 결제 알림 테스트</string>
+    <string name="sample_payment_notification_channel_name">샘플 결제 알림</string>
+    <string name="sample_payment_notification_channel_description">CardNotificationParser 검증용 테스트 알림</string>
 </resources>
