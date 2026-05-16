@@ -30,9 +30,20 @@ class CardNotificationListenerService : NotificationListenerService() {
         )
         
         if (result.parseStatus == CardNotificationParseStatus.SUCCESS && result.amount != null) {
-            val store = com.example.personalfinance.data.UserStatsStore.getInstance(this)
-            store.addExpense(result.amount)
-            Log.i(TAG, "Added expense ${result.amount} to UserStatsStore")
+            val processedKey = ProcessedNotificationKey(
+                packageName = sbn.packageName,
+                postTime = sbn.postTime,
+                amount = result.amount,
+                merchantName = result.merchantName
+            )
+
+            if (markProcessed(processedKey)) {
+                val store = com.example.personalfinance.data.UserStatsStore.getInstance(this)
+                store.addExpense(result.amount)
+                Log.i(TAG, "Added expense ${result.amount} to UserStatsStore")
+            } else {
+                Log.i(TAG, "Ignoring duplicate parsed payment notification: $processedKey")
+            }
         }
 
         Log.i(
@@ -57,7 +68,34 @@ class CardNotificationListenerService : NotificationListenerService() {
         return lines?.joinToString(separator = " ") { it.toString() }.orEmpty()
     }
 
+    private data class ProcessedNotificationKey(
+        val packageName: String,
+        val postTime: Long,
+        val amount: Long,
+        val merchantName: String
+    )
+
     private companion object {
         const val TAG = "CardNotificationListener"
+        const val MAX_PROCESSED_NOTIFICATION_KEYS = 100
+
+        val processedNotificationKeys = LinkedHashSet<ProcessedNotificationKey>()
+
+        fun markProcessed(key: ProcessedNotificationKey): Boolean =
+            synchronized(processedNotificationKeys) {
+                if (!processedNotificationKeys.add(key)) {
+                    return@synchronized false
+                }
+
+                if (processedNotificationKeys.size > MAX_PROCESSED_NOTIFICATION_KEYS) {
+                    val iterator = processedNotificationKeys.iterator()
+                    if (iterator.hasNext()) {
+                        iterator.next()
+                        iterator.remove()
+                    }
+                }
+
+                true
+            }
     }
 }
