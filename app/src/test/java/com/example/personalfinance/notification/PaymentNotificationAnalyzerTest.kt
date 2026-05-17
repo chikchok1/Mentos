@@ -52,6 +52,25 @@ class PaymentNotificationAnalyzerTest {
     }
 
     @Test
+    fun analyze_approvesTossBankNaverFinancialPayment() {
+        val analysis = PaymentNotificationAnalyzer.analyze(
+            sourcePackage = "viva.republica.toss",
+            title = "토스뱅크",
+            text = """
+                5,000원 결제
+                토스뱅크 체크카드 | 네이버파이낸셜
+                잔액 75,801원
+            """.trimIndent()
+        )
+
+        assertEquals(PaymentNotificationAnalysisStatus.APPROVED, analysis.status)
+        assertEquals(5_000L, analysis.parseResult.amount)
+        assertEquals("네이버파이낸셜", analysis.parseResult.merchantName)
+        assertEquals(ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE, analysis.category)
+        assertTrue(analysis.isRecordable)
+    }
+
+    @Test
     fun analyze_classifiesNetflixSubscriptionByCurrentKeywordPriority() {
         val analysis = PaymentNotificationAnalyzer.analyze(
             sourcePackage = "com.example.personalfinance",

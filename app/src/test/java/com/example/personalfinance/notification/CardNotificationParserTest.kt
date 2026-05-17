@@ -3,6 +3,7 @@ package com.example.personalfinance.notification
 import java.time.LocalDate
 import java.time.LocalDateTime
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -96,6 +97,45 @@ class CardNotificationParserTest {
         assertNotNull(success.amount)
         assertEquals(CardNotificationParseStatus.FAILED, failure.parseStatus)
         assertEquals(null, failure.amount)
+    }
+
+    @Test
+    fun parse_extractsMerchantAfterPipeAndIgnoresTossBankBalance() {
+        val result = CardNotificationParser.parse(
+            title = "토스뱅크",
+            text = """
+                5,000원 결제
+                토스뱅크 체크카드 | 네이버파이낸셜
+                잔액 75,801원
+            """.trimIndent(),
+            referenceDate = referenceDate
+        )
+
+        assertEquals(5_000L, result.amount)
+        assertEquals("네이버파이낸셜", result.merchantName)
+        assertEquals(CardNotificationParseStatus.SUCCESS, result.parseStatus)
+        assertFalse(result.merchantName.contains("잔액"))
+        assertFalse(result.merchantName.contains("75,801"))
+        assertFalse(result.merchantName.contains("토스뱅크"))
+        assertFalse(result.merchantName.contains("체크카드"))
+    }
+
+    @Test
+    fun parse_ignoresBalanceAmountWhenBalanceAppearsBeforePaymentAmount() {
+        val result = CardNotificationParser.parse(
+            title = "토스뱅크",
+            text = """
+                잔액 75,801원
+                5,000원 결제
+                토스뱅크 체크카드 | 네이버파이낸셜
+            """.trimIndent(),
+            referenceDate = referenceDate
+        )
+
+        assertEquals(5_000L, result.amount)
+        assertFalse(result.amount == 75_801L)
+        assertEquals("네이버파이낸셜", result.merchantName)
+        assertEquals(CardNotificationParseStatus.SUCCESS, result.parseStatus)
     }
 
     private data class Sample(
