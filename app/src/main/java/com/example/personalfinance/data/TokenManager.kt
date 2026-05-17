@@ -38,6 +38,16 @@ class TokenManager(context: Context) {
             .apply()
     }
 
+    /**
+     * 로그인 성공 직후 JWT의 sub(userId)를 명시적으로 저장.
+     * GachaStore 등 사용자 식별이 필요한 곳에서 사용.
+     */
+    fun saveUserId(userId: String) {
+        sharedPreferences.edit().putString("user_id", userId).apply()
+    }
+
+    fun getUserId(): String? = sharedPreferences.getString("user_id", null)
+
     fun getAccessToken(): String? = sharedPreferences.getString("access_token", null)
     fun getRefreshToken(): String? = sharedPreferences.getString("refresh_token", null)
 

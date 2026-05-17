@@ -17,11 +17,16 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
+import com.example.personalfinance.data.GachaStore
+import com.example.personalfinance.data.TokenManager
+import com.example.personalfinance.network.ApiClient
 import com.example.personalfinance.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // ── 캡슐머신 카드 데이터 ──────────────────────────────────────────────────────────
 
@@ -38,9 +43,39 @@ private data class CapsuleMachineData(
 
 @Composable
 fun GachaScreen(navController: NavController) {
+    val context    = LocalContext.current
+    val gachaStore = remember { GachaStore(context) }
+    val tokenManager = remember { TokenManager(context) }
+    val gachaApi = remember { ApiClient.getGachaApi(context, tokenManager) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // ── 출석 가챠 상태 (서버 연동) ────────────────────────────────────────────────────────
     var attendanceUsed by remember { mutableStateOf(false) }
-    var adWatched     by remember { mutableStateOf(false) }
-    var coins         by remember { mutableStateOf(25) }
+    // 1초마다 갱신되는 카운트다운 문자열 (UI용 로컬 계산)
+    var countdownText  by remember { mutableStateOf(gachaStore.timeUntilMidnight()) }
+
+    // 서버 상태 조회 및 타이머 루프
+    LaunchedEffect(Unit) {
+        // 백엔드에서 출석 여부 조회
+        try {
+            val response = gachaApi.getAttendanceStatus()
+            if (response.isSuccessful) {
+                attendanceUsed = response.body()?.get("usedToday") ?: false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 카운트다운 타이머 갱신
+        while (true) {
+            delay(1_000)
+            countdownText = gachaStore.timeUntilMidnight()
+        }
+    }
+
+    // ── 다른 가챠 상태 (추후 서버 연동 예정) ─────────────────────────────────
+    var adWatched by remember { mutableStateOf(false) }
+    var coins     by remember { mutableStateOf(25) }
 
     val machines = listOf(
         CapsuleMachineData(
@@ -134,16 +169,37 @@ fun GachaScreen(navController: NavController) {
                     "coin"       -> "${coins}개 보유"
                     else         -> ""
                 }
+                // 출석 가챠가 사용된 경우에만 카운트다운 표시
+                val cooldownText = if (machine.id == "attendance" && attendanceUsed) {
+                    countdownText
+                } else {
+                    null
+                }
 
                 CapsuleMachineCard(
-                    data        = machine,
-                    available   = available,
-                    statusLabel = statusLabel,
-                    onAction    = {
+                    data         = machine,
+                    available    = available,
+                    statusLabel  = statusLabel,
+                    cooldownText = cooldownText,
+                    onAction     = {
                         when (machine.id) {
-                            "attendance" -> attendanceUsed = true
-                            "ad"         -> adWatched = true
-                            "coin"       -> if (coins >= 10) coins -= 10
+                            "attendance" -> {
+                                coroutineScope.launch {
+                                    try {
+                                        val response = gachaApi.performAttendanceGacha()
+                                        if (response.isSuccessful) {
+                                            attendanceUsed = true
+                                            android.widget.Toast.makeText(context, "출석 보상을 받았습니다!", android.widget.Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            android.widget.Toast.makeText(context, "이미 처리되었거나 오류가 발생했습니다.", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "네트워크 오류가 발생했습니다.", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            "ad"   -> adWatched = true
+                            "coin" -> if (coins >= 10) coins -= 10
                         }
                     },
                 )
@@ -174,9 +230,9 @@ private fun CapsuleMachineCard(
     data: CapsuleMachineData,
     available: Boolean,
     statusLabel: String,
+    cooldownText: String?,       // null이면 카운트다운 미표시
     onAction: () -> Unit,
 ) {
-    // 버튼 클릭 시 흔들기 애니메이션 트리거
     var pressed by remember { mutableStateOf(false) }
     val shakeOffset by animateFloatAsState(
         targetValue   = if (pressed) 1f else 0f,
@@ -198,7 +254,6 @@ private fun CapsuleMachineCard(
             pressed = false
         }
     }
-
 
     Card(
         modifier  = Modifier.fillMaxWidth(),
@@ -319,6 +374,33 @@ private fun CapsuleMachineCard(
                         )
                     }
                 }
+
+                // ── 카운트다운 표시 (출석 가챠 사용 후) ───────────────────────
+                if (cooldownText != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier          = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFFFF3F3))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Rounded.Schedule,
+                            contentDescription = null,
+                            tint               = Color(0xFFFF6B6B),
+                            modifier           = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text  = "다음 뽑기까지  $cooldownText",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFFF6B6B),
+                        )
+                    }
+                }
             }
         }
     }
@@ -327,55 +409,44 @@ private fun CapsuleMachineCard(
 // ── 캡슐머신 SVG → Canvas 변환 ────────────────────────────────────────────────
 
 private fun DrawScope.drawCapsuleMachine(color: Color, alpha: Float) {
-    val w = size.width
-    val h = size.height
-    // SVG viewBox = 120x140 → scale to canvas size
+    val w  = size.width
+    val h  = size.height
     val sx = w / 120f
     val sy = h / 140f
 
     fun x(v: Float) = v * sx
     fun y(v: Float) = v * sy
-    fun r(v: Float) = v * sx  // radius scaled by x
+    fun r(v: Float) = v * sx
 
-    // Shadow
     drawOval(
-        color  = Color.Black.copy(alpha = 0.08f * alpha),
+        color   = Color.Black.copy(alpha = 0.08f * alpha),
         topLeft = Offset(x(25f), y(124f)),
-        size   = Size(x(70f), y(12f)),
+        size    = Size(x(70f), y(12f)),
     )
-
-    // Base rect
     drawRoundRect(
-        color       = color.copy(alpha = 0.9f * alpha),
-        topLeft     = Offset(x(35f), y(95f)),
-        size        = Size(x(50f), y(30f)),
+        color        = color.copy(alpha = 0.9f * alpha),
+        topLeft      = Offset(x(35f), y(95f)),
+        size         = Size(x(50f), y(30f)),
         cornerRadius = CornerRadius(r(8f)),
     )
-
-    // Dispenser opening (white overlay)
     drawRoundRect(
         color        = Color.White.copy(alpha = 0.3f * alpha),
         topLeft      = Offset(x(45f), y(100f)),
         size         = Size(x(30f), y(18f)),
         cornerRadius = CornerRadius(r(4f)),
     )
-
-    // Machine body
     drawRoundRect(
         color        = color.copy(alpha = 0.15f * alpha),
         topLeft      = Offset(x(20f), y(35f)),
         size         = Size(x(80f), y(65f)),
         cornerRadius = CornerRadius(r(12f)),
     )
-
-    // Glass dome (approximated as filled path using drawArc)
     drawOval(
         color   = Color.White.copy(alpha = 0.25f * alpha),
         topLeft = Offset(x(30f), y(20f)),
         size    = Size(x(60f), y(65f)),
     )
 
-    // Capsules inside
     data class Cap(val cx: Float, val cy: Float, val cr: Float, val a: Float)
     listOf(
         Cap(50f, 65f, 8f, 0.6f),
@@ -390,7 +461,6 @@ private fun DrawScope.drawCapsuleMachine(color: Color, alpha: Float) {
         )
     }
 
-    // Top cap ellipse
     drawOval(
         color   = color.copy(alpha = 0.9f * alpha),
         topLeft = Offset(x(35f), y(27f)),
@@ -401,21 +471,16 @@ private fun DrawScope.drawCapsuleMachine(color: Color, alpha: Float) {
         topLeft = Offset(x(35f), y(27f)),
         size    = Size(x(50f), y(16f)),
     )
-
-    // Top sphere
     drawCircle(
         color  = color.copy(alpha = 0.9f * alpha),
         radius = r(12f),
         center = Offset(x(60f), y(22f)),
     )
-    // sphere highlight
     drawCircle(
         color  = Color.White.copy(alpha = 0.6f * alpha),
         radius = r(4f),
         center = Offset(x(56f), y(18f)),
     )
-
-    // Turn knob
     drawCircle(
         color  = color.copy(alpha = 0.9f * alpha),
         radius = r(10f),

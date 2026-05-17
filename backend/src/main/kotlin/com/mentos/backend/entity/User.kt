@@ -20,5 +20,8 @@ data class User(
     var email: String? = null,
 
     @Column(nullable = false)
-    val createdAt: LocalDateTime = LocalDateTime.now()
+    val createdAt: LocalDateTime = LocalDateTime.now(),
+
+    @Column(nullable = true)
+    var lastAttendanceDate: java.time.LocalDate? = null
 )

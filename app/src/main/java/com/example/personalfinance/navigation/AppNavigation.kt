@@ -1,5 +1,6 @@
 package com.example.personalfinance.navigation
 
+import android.util.Base64
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import com.example.personalfinance.data.TokenManager
+import org.json.JSONObject
 import com.example.personalfinance.ui.main.HomeScreen
 import com.example.personalfinance.ui.main.LedgerScreen
 import com.example.personalfinance.ui.main.MenuScreen
@@ -74,6 +76,8 @@ fun AppNavigation(tokenManager: TokenManager) {
                                     if (response.isSuccessful && response.body() != null) {
                                         val authData = response.body()!!
                                         tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
+                                        // JWT sub(userId) 추출 후 명시적으로 저장
+                                        extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
                                         navController.navigate(Screen.Home.route) {
                                             popUpTo(Screen.Login.route) { inclusive = true }
                                         }
@@ -103,6 +107,8 @@ fun AppNavigation(tokenManager: TokenManager) {
                                         if (response.isSuccessful && response.body() != null) {
                                             val authData = response.body()!!
                                             tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
+                                            // JWT sub(userId) 추출 후 명시적으로 저장
+                                            extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
                                             navController.navigate(Screen.Home.route) {
                                                 popUpTo(Screen.Login.route) { inclusive = true }
                                             }
@@ -141,5 +147,24 @@ fun AppNavigation(tokenManager: TokenManager) {
         }
         composable(Screen.NotificationDebug.route) { NotificationDebugScreen(navController) }
         composable(Screen.Gacha.route)             { GachaScreen(navController)             }
+    }
+}
+
+// ── JWT Payload에서 sub(userId) 추출 ─────────────────────────────────────────
+
+/**
+ * JWT AccessToken의 payload를 Base64url 디코딩해 sub 필드를 반환.
+ * 파싱 실패 시 null 반환.
+ */
+fun extractUserIdFromJwt(token: String): String? {
+    return try {
+        val parts = token.split(".")
+        if (parts.size < 2) return null
+        // JWT payload는 Base64url(패딩 없음) → 패딩 추가 후 디코딩
+        val payload = parts[1].let { it + "=".repeat((4 - it.length % 4) % 4) }
+        val json = JSONObject(String(Base64.decode(payload, Base64.URL_SAFE), Charsets.UTF_8))
+        json.optString("sub").takeIf { it.isNotBlank() }
+    } catch (e: Exception) {
+        null
     }
 }

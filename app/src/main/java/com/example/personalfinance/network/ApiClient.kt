@@ -47,4 +47,15 @@ object ApiClient {
         }
         return authApi!!
     }
+
+    private var gachaApi: GachaApi? = null
+
+    fun getGachaApi(context: Context, tokenManager: TokenManager): GachaApi {
+        // AuthApi와 동일한 로직으로 Retrofit 초기화(이미 초기화되었다면 재사용)
+        getAuthApi(context, tokenManager)
+        if (gachaApi == null) {
+            gachaApi = retrofit!!.create(GachaApi::class.java)
+        }
+        return gachaApi!!
+    }
 }
