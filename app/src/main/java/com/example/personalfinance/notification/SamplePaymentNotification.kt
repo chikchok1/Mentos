@@ -14,7 +14,7 @@ import com.example.personalfinance.R
 object SamplePaymentNotification {
     const val SAMPLE_TITLE = "샘플 결제"
 
-    private val merchants = listOf("스타벅스", "맥도날드", "이마트", "올리브영", "다이소", "쿠팡", "배달의민족")
+    private val merchants = listOf("푸라닭 초량점", "초량 동구할인마트", "서면 CGV", "유가네닭갈비", "초량 신발원")
 
     fun canPostNotifications(context: Context): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||

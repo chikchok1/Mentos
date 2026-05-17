@@ -8,6 +8,11 @@ import com.example.personalfinance.data.ExpenseCategoryClassifier
 import com.example.personalfinance.data.TransactionSource
 import com.example.personalfinance.data.TransactionStatus
 import com.example.personalfinance.data.UserStatsStore
+import com.example.personalfinance.data.TokenManager
+import com.example.personalfinance.network.ApiClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class CardNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
@@ -101,109 +106,133 @@ class CardNotificationListenerService : NotificationListenerService() {
                 text = content.text
             )
         }
-        val category = ExpenseCategoryClassifier.classify(
-            merchantName = result.merchantName,
-            rawText = content.text
-        )
-        var diagnosticStatus = CardNotificationDiagnosticStatus.NEEDS_REVIEW
-        var diagnosticReason = "승인/취소 판단 불가"
-
-        val handlingStatus = if (PaymentNotificationRecordPolicy.shouldRecord(result, notificationType)) {
-            val approvedAmount = requireNotNull(result.amount)
-            val processedKey = ProcessedNotificationKey(
-                packageName = sbn.packageName,
-                postTime = sbn.postTime,
-                amount = approvedAmount,
-                merchantName = result.merchantName
+        val serviceScope = CoroutineScope(Dispatchers.IO)
+        serviceScope.launch {
+            // 1차: 로컬 키워드 매칭
+            var category = ExpenseCategoryClassifier.classify(
+                merchantName = result.merchantName,
+                rawText = content.text
             )
 
-            if (markProcessed(processedKey)) {
-                val store = UserStatsStore.getInstance(this)
-                val recorded = store.addExpense(
+            // 2차: 로컬 매칭이 '기타'일 경우 백엔드 AI 파싱 API 호출
+            if (category == ExpenseCategoryClassifier.CATEGORY_OTHER && result.merchantName.isNotBlank()) {
+                try {
+                    val tokenManager = TokenManager(this@CardNotificationListenerService)
+                    val classificationApi = ApiClient.getClassificationApi(this@CardNotificationListenerService, tokenManager)
+                    val response = classificationApi.categorizeMerchant(result.merchantName)
+                    
+                    if (response.isSuccessful) {
+                        val aiCategory = response.body()?.get("category")
+                        if (aiCategory != null && aiCategory in ExpenseCategoryClassifier.categories) {
+                            category = aiCategory
+                            Log.i(TAG, "AI successfully classified ${result.merchantName} as $category")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "AI Classification API error", e)
+                }
+            }
+
+            var diagnosticStatus = CardNotificationDiagnosticStatus.NEEDS_REVIEW
+            var diagnosticReason = "승인/취소 판단 불가"
+
+            val handlingStatus = if (PaymentNotificationRecordPolicy.shouldRecord(result, notificationType)) {
+                val approvedAmount = requireNotNull(result.amount)
+                val processedKey = ProcessedNotificationKey(
+                    packageName = sbn.packageName,
+                    postTime = sbn.postTime,
                     amount = approvedAmount,
-                    category = category,
-                    merchantName = result.merchantName,
-                    transactionDateTime = result.transactionDateTime,
-                    status = TransactionStatus.APPROVED_RECORDED,
-                    source = if (sbn.packageName == packageName) {
-                        TransactionSource.SAMPLE
-                    } else {
-                        TransactionSource.NOTIFICATION
-                    },
-                    transactionId = processedKey.toTransactionId()
+                    merchantName = result.merchantName
                 )
-                if (recorded) {
-                    Log.i(TAG, "Added approved payment notification to UserStatsStore")
-                    diagnosticStatus = CardNotificationDiagnosticStatus.APPROVED_RECORDED
-                    diagnosticReason = "정상 반영"
-                    CardNotificationHandlingStatus.APPROVED_RECORDED
+
+                if (markProcessed(processedKey)) {
+                    val store = UserStatsStore.getInstance(this@CardNotificationListenerService)
+                    val recorded = store.addExpense(
+                        amount = approvedAmount,
+                        category = category,
+                        merchantName = result.merchantName,
+                        transactionDateTime = result.transactionDateTime,
+                        status = TransactionStatus.APPROVED_RECORDED,
+                        source = if (sbn.packageName == packageName) {
+                            TransactionSource.SAMPLE
+                        } else {
+                            TransactionSource.NOTIFICATION
+                        },
+                        transactionId = processedKey.toTransactionId()
+                    )
+                    if (recorded) {
+                        Log.i(TAG, "Added approved payment notification to UserStatsStore")
+                        diagnosticStatus = CardNotificationDiagnosticStatus.APPROVED_RECORDED
+                        diagnosticReason = "정상 반영"
+                        CardNotificationHandlingStatus.APPROVED_RECORDED
+                    } else {
+                        Log.i(TAG, "Ignoring duplicate stored payment transaction")
+                        diagnosticStatus = CardNotificationDiagnosticStatus.DUPLICATE_IGNORED
+                        diagnosticReason = "중복 알림"
+                        CardNotificationHandlingStatus.DUPLICATE_IGNORED
+                    }
                 } else {
-                    Log.i(TAG, "Ignoring duplicate stored payment transaction")
+                    Log.i(TAG, "Ignoring duplicate parsed payment notification")
                     diagnosticStatus = CardNotificationDiagnosticStatus.DUPLICATE_IGNORED
                     diagnosticReason = "중복 알림"
                     CardNotificationHandlingStatus.DUPLICATE_IGNORED
                 }
             } else {
-                Log.i(TAG, "Ignoring duplicate parsed payment notification")
-                diagnosticStatus = CardNotificationDiagnosticStatus.DUPLICATE_IGNORED
-                diagnosticReason = "중복 알림"
-                CardNotificationHandlingStatus.DUPLICATE_IGNORED
-            }
-        } else {
-            when {
-                notificationType == PaymentNotificationType.CANCELED -> {
-                    Log.i(TAG, "Ignoring canceled payment notification package=${sbn.packageName}")
-                    diagnosticStatus = CardNotificationDiagnosticStatus.CANCELED
-                    diagnosticReason = "취소 알림"
-                    CardNotificationHandlingStatus.CANCELED_IGNORED
-                }
-                result.parseStatus == CardNotificationParseStatus.FAILED || result.amount == null -> {
-                    Log.i(TAG, "Payment notification parsing failed package=${sbn.packageName}")
-                    diagnosticStatus = CardNotificationDiagnosticStatus.PARSE_FAILED
-                    diagnosticReason = when {
-                        content.text.isBlank() -> "rawText 추출 부족"
-                        result.amount == null -> "금액 파싱 실패"
-                        result.merchantName.isBlank() -> "점포명 파싱 실패"
-                        else -> "파싱 실패"
+                when {
+                    notificationType == PaymentNotificationType.CANCELED -> {
+                        Log.i(TAG, "Ignoring canceled payment notification package=${sbn.packageName}")
+                        diagnosticStatus = CardNotificationDiagnosticStatus.CANCELED
+                        diagnosticReason = "취소 알림"
+                        CardNotificationHandlingStatus.CANCELED_IGNORED
                     }
-                    CardNotificationHandlingStatus.PARSE_FAILED
-                }
-                else -> {
-                    Log.i(TAG, "Payment notification needs review package=${sbn.packageName}")
-                    diagnosticStatus = CardNotificationDiagnosticStatus.NEEDS_REVIEW
-                    diagnosticReason = "승인/취소 판단 불가"
-                    CardNotificationHandlingStatus.NEEDS_REVIEW
+                    result.parseStatus == CardNotificationParseStatus.FAILED || result.amount == null -> {
+                        Log.i(TAG, "Payment notification parsing failed package=${sbn.packageName}")
+                        diagnosticStatus = CardNotificationDiagnosticStatus.PARSE_FAILED
+                        diagnosticReason = when {
+                            content.text.isBlank() -> "rawText 추출 부족"
+                            result.amount == null -> "금액 파싱 실패"
+                            result.merchantName.isBlank() -> "점포명 파싱 실패"
+                            else -> "파싱 실패"
+                        }
+                        CardNotificationHandlingStatus.PARSE_FAILED
+                    }
+                    else -> {
+                        Log.i(TAG, "Payment notification needs review package=${sbn.packageName}")
+                        diagnosticStatus = CardNotificationDiagnosticStatus.NEEDS_REVIEW
+                        diagnosticReason = "승인/취소 판단 불가"
+                        CardNotificationHandlingStatus.NEEDS_REVIEW
+                    }
                 }
             }
+
+            CardNotificationDebugStore.recordDiagnostic(
+                diagnosticId = diagnosticId,
+                packageName = sbn.packageName,
+                title = content.title,
+                status = diagnosticStatus,
+                reason = diagnosticReason,
+                handled = true,
+                rawText = content.text,
+                allowRawTextPreview = true
+            )
+
+            CardNotificationDebugStore.update(
+                sourcePackage = sbn.packageName,
+                title = content.title,
+                text = content.text,
+                result = result,
+                category = category,
+                notificationType = notificationType,
+                handlingStatus = handlingStatus
+            )
+
+            Log.i(
+                TAG,
+                "Handled payment notification: handlingStatus=$handlingStatus, " +
+                    "notificationType=$notificationType, parseStatus=${result.parseStatus}, " +
+                    "diagnosticStatus=$diagnosticStatus"
+            )
         }
-
-        CardNotificationDebugStore.recordDiagnostic(
-            diagnosticId = diagnosticId,
-            packageName = sbn.packageName,
-            title = content.title,
-            status = diagnosticStatus,
-            reason = diagnosticReason,
-            handled = true,
-            rawText = content.text,
-            allowRawTextPreview = true
-        )
-
-        CardNotificationDebugStore.update(
-            sourcePackage = sbn.packageName,
-            title = content.title,
-            text = content.text,
-            result = result,
-            category = category,
-            notificationType = notificationType,
-            handlingStatus = handlingStatus
-        )
-
-        Log.i(
-            TAG,
-            "Handled payment notification: handlingStatus=$handlingStatus, " +
-                "notificationType=$notificationType, parseStatus=${result.parseStatus}, " +
-                "diagnosticStatus=$diagnosticStatus"
-        )
     }
 
     private fun StatusBarNotification.toDiagnosticId(): String =

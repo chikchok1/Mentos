@@ -49,13 +49,21 @@ object ApiClient {
     }
 
     private var gachaApi: GachaApi? = null
+    private var classificationApi: ClassificationApi? = null
 
     fun getGachaApi(context: Context, tokenManager: TokenManager): GachaApi {
-        // AuthApi와 동일한 로직으로 Retrofit 초기화(이미 초기화되었다면 재사용)
         getAuthApi(context, tokenManager)
         if (gachaApi == null) {
             gachaApi = retrofit!!.create(GachaApi::class.java)
         }
         return gachaApi!!
+    }
+
+    fun getClassificationApi(context: Context, tokenManager: TokenManager): ClassificationApi {
+        getAuthApi(context, tokenManager)
+        if (classificationApi == null) {
+            classificationApi = retrofit!!.create(ClassificationApi::class.java)
+        }
+        return classificationApi!!
     }
 }

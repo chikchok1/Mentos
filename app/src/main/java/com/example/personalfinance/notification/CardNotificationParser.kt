@@ -12,7 +12,7 @@ object CardNotificationParser {
     private val balanceAmountKeywords = listOf("잔액", "잔여", "남은 금액", "보유금액")
     private val paymentAmountKeywords = listOf("결제", "승인", "사용", "출금")
     private val merchantCleanupPattern = Regex(
-        """^(체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)\s*|\s*(체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)$"""
+        """^(샘플\s*결제|체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)\s*|\s*(체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)$"""
     )
 
     fun parse(
