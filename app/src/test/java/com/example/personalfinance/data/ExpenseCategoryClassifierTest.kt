@@ -29,6 +29,14 @@ class ExpenseCategoryClassifierTest {
     }
 
     @Test
+    fun classify_returnsShoppingOnlineForNaverFinancial() {
+        assertEquals(
+            ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE,
+            ExpenseCategoryClassifier.classify(merchantName = "네이버파이낸셜", rawText = "")
+        )
+    }
+
+    @Test
     fun classify_returnsCultureLeisureForNetflix() {
         assertEquals(
             ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE,

@@ -53,6 +53,7 @@ object ExpenseCategoryClassifier {
         CATEGORY_SHOPPING_ONLINE to listOf(
             "쿠팡",
             "네이버페이",
+            "네이버파이낸셜",
             "11번가",
             "G마켓",
             "옥션",
