@@ -12,7 +12,7 @@ import androidx.core.content.ContextCompat
 import com.example.personalfinance.R
 
 object SamplePaymentNotification {
-    const val SAMPLE_TITLE = "Mentos Test Card"
+    const val SAMPLE_TITLE = "샘플 결제"
 
     private val merchants = listOf("스타벅스", "맥도날드", "이마트", "올리브영", "다이소", "쿠팡", "배달의민족")
 
@@ -31,8 +31,10 @@ object SamplePaymentNotification {
         // Generate random amount between 1,000 and 50,000
         val randomAmount = (1..50).random() * 1000
         val randomMerchant = merchants.random()
-        val formattedAmount = java.text.NumberFormat.getNumberInstance(java.util.Locale.US).format(randomAmount)
-        val dynamicText = "05/13 14:22 ${formattedAmount}원 $randomMerchant"
+        val dynamicText = buildSampleText(
+            merchantName = randomMerchant,
+            amount = randomAmount
+        )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -45,6 +47,14 @@ object SamplePaymentNotification {
 
         NotificationManagerCompat.from(context).notify(SAMPLE_NOTIFICATION_ID, notification)
         return true
+    }
+
+    internal fun buildSampleText(
+        merchantName: String,
+        amount: Int
+    ): String {
+        val formattedAmount = java.text.NumberFormat.getNumberInstance(java.util.Locale.US).format(amount)
+        return "$merchantName ${formattedAmount}원 승인"
     }
 
     private fun ensureChannel(context: Context) {

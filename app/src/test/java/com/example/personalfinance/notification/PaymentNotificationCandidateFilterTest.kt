@@ -1,10 +1,34 @@
 package com.example.personalfinance.notification
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PaymentNotificationCandidateFilterTest {
+    @Test
+    fun isCandidate_acceptsSamplePaymentNotificationText() {
+        val sampleText = SamplePaymentNotification.buildSampleText(
+            merchantName = "맥도날드",
+            amount = 35_000
+        )
+
+        assertTrue(
+            PaymentNotificationCandidateFilter.isCandidate(
+                title = SamplePaymentNotification.SAMPLE_TITLE,
+                rawText = sampleText
+            )
+        )
+
+        val parseResult = CardNotificationParser.parse(
+            title = SamplePaymentNotification.SAMPLE_TITLE,
+            text = sampleText
+        )
+        assertEquals(CardNotificationParseStatus.SUCCESS, parseResult.parseStatus)
+        assertEquals(35_000L, parseResult.amount)
+        assertEquals("맥도날드", parseResult.merchantName)
+    }
+
     @Test
     fun isCandidate_acceptsTossPaymentNotification() {
         assertTrue(
