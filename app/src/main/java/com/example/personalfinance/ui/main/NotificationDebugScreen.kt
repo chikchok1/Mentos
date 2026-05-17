@@ -53,9 +53,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
+import com.example.personalfinance.data.UserStatsCalculator
+import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.notification.CardNotificationDiagnosticEntry
 import com.example.personalfinance.notification.CardNotificationDiagnosticFilter
-import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.notification.CardNotificationDebugEntry
 import com.example.personalfinance.notification.CardNotificationDebugStore
 import com.example.personalfinance.notification.PaymentNotificationAnalysis
@@ -74,6 +75,7 @@ import com.example.personalfinance.ui.theme.RedDanger
 fun NotificationDebugScreen(navController: NavController) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val userStatsStore = remember { UserStatsStore.getInstance(context) }
     val latestResult by CardNotificationDebugStore.latestResult.collectAsState()
     val recentDiagnostics by CardNotificationDebugStore.recentDiagnostics.collectAsState()
     var listenerEnabled by remember { mutableStateOf(context.isNotificationListenerEnabled()) }
@@ -84,6 +86,7 @@ fun NotificationDebugScreen(navController: NavController) {
     var manualTitle by remember { mutableStateOf("신한카드") }
     var manualText by remember { mutableStateOf("스타벅스 5,000원 승인") }
     var manualAnalysis by remember { mutableStateOf<PaymentNotificationAnalysis?>(null) }
+    var reclassificationMessage by remember { mutableStateOf<String?>(null) }
 
     val postNotificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -197,6 +200,18 @@ fun NotificationDebugScreen(navController: NavController) {
                 }
             )
 
+            StoredTransactionMaintenancePanel(
+                message = reclassificationMessage,
+                onReclassify = {
+                    val count = userStatsStore.reclassifyOtherTransactions()
+                    reclassificationMessage = if (count > 0) {
+                        "${count}건의 기타 거래를 재분류했습니다."
+                    } else {
+                        "재분류된 기타 거래가 없습니다."
+                    }
+                }
+            )
+
             LatestResultPanel(latestResult)
 
             RecentDiagnosticsPanel(recentDiagnostics)
@@ -300,6 +315,31 @@ private fun ManualNotificationTestPanel(
         }
 
         ManualAnalysisResultPanel(analysis)
+    }
+}
+
+@Composable
+private fun StoredTransactionMaintenancePanel(
+    message: String?,
+    onReclassify: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Gray200, RoundedCornerShape(8.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("저장된 거래 관리", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Button(
+            onClick = onReclassify,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("기존 기타 거래 재분류")
+        }
+        message?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = Gray700)
+        }
     }
 }
 
