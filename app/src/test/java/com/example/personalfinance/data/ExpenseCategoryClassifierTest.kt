@@ -21,6 +21,37 @@ class ExpenseCategoryClassifierTest {
     }
 
     @Test
+    fun classify_returnsLivingMartForConvenienceStoreBranches() {
+        listOf(
+            "씨유 개금금강원룸점",
+            "CU 부산대점",
+            "GS25 동의대점",
+            "이마트24 서면점"
+        ).forEach { merchantName ->
+            assertEquals(
+                merchantName,
+                ExpenseCategoryClassifier.CATEGORY_LIVING_MART,
+                ExpenseCategoryClassifier.classify(merchantName = merchantName, rawText = "")
+            )
+        }
+    }
+
+    @Test
+    fun classify_returnsLivingMartForButcherAndGroceryMerchants() {
+        listOf(
+            "청춘정육",
+            "한우정육점",
+            "동네축산"
+        ).forEach { merchantName ->
+            assertEquals(
+                merchantName,
+                ExpenseCategoryClassifier.CATEGORY_LIVING_MART,
+                ExpenseCategoryClassifier.classify(merchantName = merchantName, rawText = "")
+            )
+        }
+    }
+
+    @Test
     fun classify_returnsShoppingOnlineForCoupang() {
         assertEquals(
             ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE,

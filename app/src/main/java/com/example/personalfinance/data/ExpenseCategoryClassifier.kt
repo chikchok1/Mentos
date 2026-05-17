@@ -41,14 +41,26 @@ object ExpenseCategoryClassifier {
         ),
         CATEGORY_LIVING_MART to listOf(
             "CU",
+            "씨유",
             "GS25",
+            "지에스25",
             "세븐일레븐",
+            "이마트24",
             "이마트",
             "홈플러스",
             "롯데마트",
             "다이소",
             "마트",
-            "편의점"
+            "슈퍼",
+            "하나로마트",
+            "편의점",
+            "정육",
+            "정육점",
+            "축산",
+            "식육",
+            "고기",
+            "한우",
+            "육류"
         ),
         CATEGORY_SHOPPING_ONLINE to listOf(
             "쿠팡",
