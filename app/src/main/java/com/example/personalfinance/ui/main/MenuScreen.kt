@@ -93,7 +93,11 @@ fun MenuScreen(
                         .padding(vertical = 5.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Gray50)
-                        .clickable { }
+                        .clickable {
+                            when (item.id) {
+                                "gacha" -> navController.navigate(com.example.personalfinance.navigation.Screen.Gacha.route)
+                            }
+                        }
                         .padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment     = Alignment.CenterVertically
