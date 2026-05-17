@@ -1,9 +1,28 @@
 package com.example.personalfinance.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TransactionHistoryTest {
+    @Test
+    fun transactionPersistencePolicy_allowsOnlyApprovedRecordedStatus() {
+        assertTrue(TransactionPersistencePolicy.shouldPersist(TransactionStatus.APPROVED_RECORDED))
+
+        listOf(
+            "canceled",
+            "parse_failed",
+            "needs_review",
+            "duplicate_ignored",
+            "ignored_package",
+            "ignored_non_payment",
+            ""
+        ).forEach { status ->
+            assertFalse(TransactionPersistencePolicy.shouldPersist(status))
+        }
+    }
+
     @Test
     fun transactionJsonCodec_roundTripsPaymentDetails() {
         val transaction = Transaction(

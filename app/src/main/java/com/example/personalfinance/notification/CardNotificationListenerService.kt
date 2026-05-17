@@ -58,6 +58,25 @@ class CardNotificationListenerService : NotificationListenerService() {
             allowRawTextPreview = true
         )
 
+        if (!PaymentNotificationCandidateFilter.isCandidate(content.title, content.text)) {
+            CardNotificationDebugStore.recordDiagnostic(
+                diagnosticId = diagnosticId,
+                packageName = sbn.packageName,
+                title = content.title,
+                status = CardNotificationDiagnosticStatus.IGNORED_NON_PAYMENT,
+                reason = if (content.text.isBlank()) {
+                    "rawText 추출 부족"
+                } else {
+                    "결제 알림 아님"
+                },
+                handled = true,
+                rawText = content.text,
+                allowRawTextPreview = true
+            )
+            Log.i(TAG, "Ignoring non-payment notification package=${sbn.packageName}")
+            return
+        }
+
         val result = runCatching {
             CardNotificationParser.parse(title = content.title, text = content.text)
         }.getOrElse { error ->
@@ -89,22 +108,19 @@ class CardNotificationListenerService : NotificationListenerService() {
         var diagnosticStatus = CardNotificationDiagnosticStatus.NEEDS_REVIEW
         var diagnosticReason = "승인/취소 판단 불가"
 
-        val handlingStatus = if (
-            result.parseStatus == CardNotificationParseStatus.SUCCESS &&
-            result.amount != null &&
-            notificationType == PaymentNotificationType.APPROVED
-        ) {
+        val handlingStatus = if (PaymentNotificationRecordPolicy.shouldRecord(result, notificationType)) {
+            val approvedAmount = requireNotNull(result.amount)
             val processedKey = ProcessedNotificationKey(
                 packageName = sbn.packageName,
                 postTime = sbn.postTime,
-                amount = result.amount,
+                amount = approvedAmount,
                 merchantName = result.merchantName
             )
 
             if (markProcessed(processedKey)) {
                 val store = UserStatsStore.getInstance(this)
                 val recorded = store.addExpense(
-                    amount = result.amount,
+                    amount = approvedAmount,
                     category = category,
                     merchantName = result.merchantName,
                     transactionDateTime = result.transactionDateTime,
@@ -261,4 +277,48 @@ class CardNotificationListenerService : NotificationListenerService() {
                 true
             }
     }
+}
+
+internal object PaymentNotificationCandidateFilter {
+    private val amountPattern = Regex("""([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*원""")
+    private val paymentKeywords = listOf(
+        "결제",
+        "승인",
+        "사용",
+        "체크카드",
+        "신용카드",
+        "출금",
+        "자동이체",
+        "정기결제"
+    )
+    private val cancelKeywords = listOf(
+        "취소",
+        "승인취소",
+        "결제취소",
+        "환불",
+        "매출취소"
+    )
+
+    fun isCandidate(title: String, rawText: String): Boolean {
+        val combined = "$title $rawText"
+        val normalized = normalize(combined)
+
+        return amountPattern.containsMatchIn(combined) &&
+            (paymentKeywords + cancelKeywords).any { keyword ->
+                normalized.contains(normalize(keyword))
+            }
+    }
+
+    private fun normalize(value: String): String =
+        value.filterNot { it.isWhitespace() }
+}
+
+internal object PaymentNotificationRecordPolicy {
+    fun shouldRecord(
+        result: CardNotificationParseResult,
+        notificationType: PaymentNotificationType
+    ): Boolean =
+        result.parseStatus == CardNotificationParseStatus.SUCCESS &&
+            result.amount != null &&
+            notificationType == PaymentNotificationType.APPROVED
 }

@@ -93,6 +93,10 @@ class UserStatsStore private constructor(context: Context) {
         source: String = TransactionSource.NOTIFICATION,
         transactionId: String? = null
     ): Boolean {
+        if (!TransactionPersistencePolicy.shouldPersist(status)) {
+            return false
+        }
+
         val current = _statsFlow.value
         val normalizedCategory = if (category in ExpenseCategoryClassifier.categories) {
             category
@@ -205,6 +209,11 @@ class UserStatsStore private constructor(context: Context) {
             }
         }
     }
+}
+
+internal object TransactionPersistencePolicy {
+    fun shouldPersist(status: String): Boolean =
+        status == TransactionStatus.APPROVED_RECORDED
 }
 
 internal object TransactionHistory {
