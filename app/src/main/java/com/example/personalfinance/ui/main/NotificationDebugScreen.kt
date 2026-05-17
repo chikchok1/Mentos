@@ -33,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -54,6 +55,9 @@ import androidx.navigation.NavController
 import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.notification.CardNotificationDebugEntry
 import com.example.personalfinance.notification.CardNotificationDebugStore
+import com.example.personalfinance.notification.PaymentNotificationAnalysis
+import com.example.personalfinance.notification.PaymentNotificationAnalysisStatus
+import com.example.personalfinance.notification.PaymentNotificationAnalyzer
 import com.example.personalfinance.notification.SamplePaymentNotification
 import com.example.personalfinance.ui.theme.Gray100
 import com.example.personalfinance.ui.theme.Gray200
@@ -72,6 +76,10 @@ fun NotificationDebugScreen(navController: NavController) {
     var canPostNotifications by remember {
         mutableStateOf(SamplePaymentNotification.canPostNotifications(context))
     }
+    var manualPackageName by remember { mutableStateOf("com.example.personalfinance") }
+    var manualTitle by remember { mutableStateOf("신한카드") }
+    var manualText by remember { mutableStateOf("스타벅스 5,000원 승인") }
+    var manualAnalysis by remember { mutableStateOf<PaymentNotificationAnalysis?>(null) }
 
     val postNotificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -167,6 +175,23 @@ fun NotificationDebugScreen(navController: NavController) {
                 Text("샘플 결제 알림 발생", modifier = Modifier.padding(start = 8.dp))
             }
 
+            ManualNotificationTestPanel(
+                packageName = manualPackageName,
+                onPackageNameChange = { manualPackageName = it },
+                title = manualTitle,
+                onTitleChange = { manualTitle = it },
+                text = manualText,
+                onTextChange = { manualText = it },
+                analysis = manualAnalysis,
+                onAnalyze = {
+                    manualAnalysis = PaymentNotificationAnalyzer.analyze(
+                        sourcePackage = manualPackageName,
+                        title = manualTitle,
+                        text = manualText
+                    )
+                }
+            )
+
             LatestResultPanel(latestResult)
         }
     }
@@ -221,6 +246,82 @@ private fun StatusPanel(listenerEnabled: Boolean) {
 }
 
 @Composable
+private fun ManualNotificationTestPanel(
+    packageName: String,
+    onPackageNameChange: (String) -> Unit,
+    title: String,
+    onTitleChange: (String) -> Unit,
+    text: String,
+    onTextChange: (String) -> Unit,
+    analysis: PaymentNotificationAnalysis?,
+    onAnalyze: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Gray200, RoundedCornerShape(8.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("원문 파싱 테스트", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        OutlinedTextField(
+            value = packageName,
+            onValueChange = onPackageNameChange,
+            label = { Text("패키지명") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = title,
+            onValueChange = onTitleChange,
+            label = { Text("알림 제목") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = text,
+            onValueChange = onTextChange,
+            label = { Text("알림 본문") },
+            minLines = 3,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Button(
+            onClick = onAnalyze,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("원문 파싱 테스트")
+        }
+
+        ManualAnalysisResultPanel(analysis)
+    }
+}
+
+@Composable
+private fun ManualAnalysisResultPanel(analysis: PaymentNotificationAnalysis?) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Gray200, RoundedCornerShape(8.dp))
+            .padding(16.dp)
+    ) {
+        Text("원문 테스트 결과", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(12.dp))
+
+        if (analysis == null) {
+            Text("입력값으로 파싱 테스트를 실행해보세요.", style = MaterialTheme.typography.bodyMedium, color = Gray500)
+            return@Column
+        }
+
+        ResultRow("상태", analysis.status.toDisplayText())
+        ResultRow("점포명", analysis.parseResult.merchantName.ifBlank { "-" })
+        ResultRow("금액", analysis.parseResult.amount?.let { "%,d원".format(it) } ?: "-")
+        ResultRow("카테고리", analysis.category)
+        ResultRow("획득 XP", analysis.earnedXP?.let { "${it}XP" } ?: "-")
+        ResultRow("지출 반영 여부", "미반영")
+    }
+}
+
+@Composable
 private fun LatestResultPanel(entry: CardNotificationDebugEntry?) {
     Column(
         modifier = Modifier
@@ -250,6 +351,14 @@ private fun LatestResultPanel(entry: CardNotificationDebugEntry?) {
         ResultRow("수신 시각", entry.receivedAt.toString())
     }
 }
+
+private fun PaymentNotificationAnalysisStatus.toDisplayText(): String =
+    when (this) {
+        PaymentNotificationAnalysisStatus.APPROVED -> "승인"
+        PaymentNotificationAnalysisStatus.CANCELED -> "취소"
+        PaymentNotificationAnalysisStatus.NEEDS_REVIEW -> "확인 필요"
+        PaymentNotificationAnalysisStatus.PARSE_FAILED -> "파싱 실패"
+    }
 
 @Composable
 private fun ResultRow(label: String, value: String) {

@@ -7,7 +7,9 @@ object CardNotificationParser {
     private val amountPattern = Regex("""([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*원""")
     private val dateTimePattern = Regex("""(\d{2})/(\d{2})\s+(\d{1,2}):(\d{2})""")
     private val bracketTagPattern = Regex("""^\[[^\]]+]\s*""")
-    private val merchantCleanupPattern = Regex("""^(체크승인|일시불\s*승인|승인|결제)\s*|\s*(체크승인|일시불\s*승인|승인|결제)$""")
+    private val merchantCleanupPattern = Regex(
+        """^(체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)\s*|\s*(체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)$"""
+    )
 
     fun parse(
         title: String?,
