@@ -5,6 +5,9 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.example.personalfinance.data.ExpenseCategoryClassifier
+import com.example.personalfinance.data.TransactionSource
+import com.example.personalfinance.data.TransactionStatus
+import com.example.personalfinance.data.UserStatsStore
 
 class CardNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
@@ -62,10 +65,27 @@ class CardNotificationListenerService : NotificationListenerService() {
             )
 
             if (markProcessed(processedKey)) {
-                val store = com.example.personalfinance.data.UserStatsStore.getInstance(this)
-                store.addExpense(result.amount, category)
-                Log.i(TAG, "Added expense ${result.amount} to UserStatsStore with category=$category")
-                CardNotificationHandlingStatus.APPROVED_RECORDED
+                val store = UserStatsStore.getInstance(this)
+                val recorded = store.addExpense(
+                    amount = result.amount,
+                    category = category,
+                    merchantName = result.merchantName,
+                    transactionDateTime = result.transactionDateTime,
+                    status = TransactionStatus.APPROVED_RECORDED,
+                    source = if (sbn.packageName == packageName) {
+                        TransactionSource.SAMPLE
+                    } else {
+                        TransactionSource.NOTIFICATION
+                    },
+                    transactionId = processedKey.toTransactionId()
+                )
+                if (recorded) {
+                    Log.i(TAG, "Added expense ${result.amount} to UserStatsStore with category=$category")
+                    CardNotificationHandlingStatus.APPROVED_RECORDED
+                } else {
+                    Log.i(TAG, "Ignoring duplicate stored payment transaction: $processedKey")
+                    CardNotificationHandlingStatus.DUPLICATE_IGNORED
+                }
             } else {
                 Log.i(TAG, "Ignoring duplicate parsed payment notification: $processedKey")
                 CardNotificationHandlingStatus.DUPLICATE_IGNORED
@@ -144,7 +164,9 @@ class CardNotificationListenerService : NotificationListenerService() {
         val postTime: Long,
         val amount: Long,
         val merchantName: String
-    )
+    ) {
+        fun toTransactionId(): String = "$packageName|$postTime|$amount|$merchantName"
+    }
 
     private companion object {
         const val TAG = "CardNotificationListener"

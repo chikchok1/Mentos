@@ -16,9 +16,22 @@ data class CategoryData(
 data class Transaction(
     val store: String,
     val date: String,
-    val amount: Int,
-    val category: String
+    val amount: Long,
+    val category: String,
+    val status: String = TransactionStatus.APPROVED_RECORDED,
+    val source: String = TransactionSource.SAMPLE,
+    val occurredAt: String = date,
+    val id: String = "$source|$occurredAt|$amount|$store"
 )
+
+object TransactionStatus {
+    const val APPROVED_RECORDED = "approved_recorded"
+}
+
+object TransactionSource {
+    const val NOTIFICATION = "notification"
+    const val SAMPLE = "sample"
+}
 
 data class MonthlyData(
     val month: String,
@@ -75,4 +88,6 @@ fun categoryEmoji(name: String): String = when (name) {
     else           -> "📦"
 }
 
-fun formatWon(amount: Int): String = "₩${String.format("%,d", amount)}"
+fun formatWon(amount: Int): String = formatWon(amount.toLong())
+
+fun formatWon(amount: Long): String = "₩${String.format("%,d", amount)}"

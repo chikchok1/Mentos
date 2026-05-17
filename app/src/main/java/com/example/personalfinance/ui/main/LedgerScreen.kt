@@ -56,15 +56,19 @@ private fun categoryEmojiForClassifier(category: String): String = when (categor
 
 // ── UserStats → CategoryData 변환 ────────────────────────────────────────────
 
-private fun buildCategoriesFromStats(categorySpending: Map<String, Long>): List<CategoryData> {
+private fun buildCategoriesFromStats(
+    categorySpending: Map<String, Long>,
+    transactions: List<Transaction>
+): List<CategoryData> {
     val total = categorySpending.values.sum().coerceAtLeast(1L)
+    val transactionCountsByCategory = transactions.groupingBy { it.category }.eachCount()
     return categorySpending
         .filter { it.value > 0L }
         .map { (category, amount) ->
             CategoryData(
-                name       = classifierCategoryToDisplayName(category),
+                name       = category,
                 value      = amount.toInt(),
-                count      = 0,          // 현재 거래 건수 정보 없음
+                count      = transactionCountsByCategory[category] ?: 0,
                 percentage = ((amount.toFloat() / total) * 100).toInt(),
                 color      = categoryColorFor(category)
             )
@@ -77,14 +81,15 @@ fun LedgerScreen(navController: NavController) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store   = remember { UserStatsStore.getInstance(context) }
     val stats   by store.statsFlow.collectAsState()
+    val storedTransactions by store.transactionsFlow.collectAsState()
 
     var selectedTab      by remember { mutableStateOf(0) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var budgetEnabled    by remember { mutableStateOf(true) }
 
     // ── 실제 파싱 데이터에서 빌드 ────────────────────────────────────────────
-    val categories   = buildCategoriesFromStats(stats.categorySpending)
-    val transactions = SampleData.transactions   // 거래 내역은 현재 별도 저장 구조 없음
+    val transactions = storedTransactions
+    val categories   = buildCategoriesFromStats(stats.categorySpending, transactions)
     val monthlyData  = SampleData.monthly
 
     val totalSpending        = stats.thisMonthSpending.toInt()
@@ -330,7 +335,7 @@ private fun LedgerTab(
             modifier   = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
         )
         transactions.forEach { tx ->
-            val catColor = SampleData.categories.find { it.name == tx.category }?.color ?: Gray400
+            val catColor = categoryColorFor(tx.category)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -346,11 +351,11 @@ private fun LedgerTab(
                     Box(
                         modifier         = Modifier.size(40.dp).background(catColor.copy(0.2f), CircleShape),
                         contentAlignment = Alignment.Center
-                    ) { Text(categoryEmoji(tx.category), fontSize = 18.sp) }
+                    ) { Text(categoryEmojiForClassifier(tx.category), fontSize = 18.sp) }
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(tx.store, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                        Text(tx.date,  style = MaterialTheme.typography.bodySmall,  color = Gray500)
+                        Text("${tx.category} · ${tx.date}",  style = MaterialTheme.typography.bodySmall,  color = Gray500)
                     }
                 }
                 Text(formatWon(tx.amount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
