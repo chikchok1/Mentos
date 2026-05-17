@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
+import com.example.personalfinance.notification.CardNotificationDiagnosticEntry
 import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.notification.CardNotificationDebugEntry
 import com.example.personalfinance.notification.CardNotificationDebugStore
@@ -72,6 +73,7 @@ fun NotificationDebugScreen(navController: NavController) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val latestResult by CardNotificationDebugStore.latestResult.collectAsState()
+    val recentDiagnostics by CardNotificationDebugStore.recentDiagnostics.collectAsState()
     var listenerEnabled by remember { mutableStateOf(context.isNotificationListenerEnabled()) }
     var canPostNotifications by remember {
         mutableStateOf(SamplePaymentNotification.canPostNotifications(context))
@@ -193,6 +195,8 @@ fun NotificationDebugScreen(navController: NavController) {
             )
 
             LatestResultPanel(latestResult)
+
+            RecentDiagnosticsPanel(recentDiagnostics)
         }
     }
 }
@@ -359,6 +363,40 @@ private fun PaymentNotificationAnalysisStatus.toDisplayText(): String =
         PaymentNotificationAnalysisStatus.NEEDS_REVIEW -> "확인 필요"
         PaymentNotificationAnalysisStatus.PARSE_FAILED -> "파싱 실패"
     }
+
+@Composable
+private fun RecentDiagnosticsPanel(entries: List<CardNotificationDiagnosticEntry>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Gray200, RoundedCornerShape(8.dp))
+            .padding(16.dp)
+    ) {
+        Text("최근 감지 알림 진단", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(12.dp))
+
+        if (entries.isEmpty()) {
+            Text("아직 감지된 알림이 없습니다.", style = MaterialTheme.typography.bodyMedium, color = Gray500)
+            return@Column
+        }
+
+        entries.forEachIndexed { index, entry ->
+            if (index > 0) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Gray100)
+            }
+
+            ResultRow("패키지", entry.packageName)
+            ResultRow("제목", entry.title.ifBlank { "-" })
+            ResultRow("상태", entry.status.name)
+            ResultRow("이유", entry.reason)
+            ResultRow("처리 여부", if (entry.handled) "처리됨" else "수신됨")
+            ResultRow("수신 시각", entry.receivedAt.toString())
+            entry.rawTextPreview?.let { preview ->
+                ResultRow("본문 미리보기", preview)
+            }
+        }
+    }
+}
 
 @Composable
 private fun ResultRow(label: String, value: String) {

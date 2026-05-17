@@ -16,13 +16,48 @@ class CardNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        val diagnosticId = sbn.toDiagnosticId()
+        val notification = sbn.notification
+        val title = notification.extractTitle()
+
         if (!CardNotificationSourcePolicy.isSupported(sbn.packageName, packageName)) {
+            CardNotificationDebugStore.recordDiagnostic(
+                diagnosticId = diagnosticId,
+                packageName = sbn.packageName,
+                title = title,
+                status = CardNotificationDiagnosticStatus.IGNORED_PACKAGE,
+                reason = "허용되지 않은 패키지",
+                handled = true
+            )
             Log.d(TAG, "Ignoring unsupported notification package=${sbn.packageName}")
             return
         }
 
-        val notification = sbn.notification ?: return
+        if (notification == null) {
+            CardNotificationDebugStore.recordDiagnostic(
+                diagnosticId = diagnosticId,
+                packageName = sbn.packageName,
+                title = title,
+                status = CardNotificationDiagnosticStatus.PARSE_FAILED,
+                reason = "알림 내용 없음",
+                handled = true,
+                allowRawTextPreview = true
+            )
+            return
+        }
+
         val content = notification.extractContent()
+        CardNotificationDebugStore.recordDiagnostic(
+            diagnosticId = diagnosticId,
+            packageName = sbn.packageName,
+            title = content.title,
+            status = CardNotificationDiagnosticStatus.RECEIVED,
+            reason = "알림 수신",
+            handled = false,
+            rawText = content.text,
+            allowRawTextPreview = true
+        )
+
         val result = runCatching {
             CardNotificationParser.parse(title = content.title, text = content.text)
         }.getOrElse { error ->
@@ -51,6 +86,8 @@ class CardNotificationListenerService : NotificationListenerService() {
             merchantName = result.merchantName,
             rawText = content.text
         )
+        var diagnosticStatus = CardNotificationDiagnosticStatus.NEEDS_REVIEW
+        var diagnosticReason = "승인/취소 판단 불가"
 
         val handlingStatus = if (
             result.parseStatus == CardNotificationParseStatus.SUCCESS &&
@@ -80,32 +117,60 @@ class CardNotificationListenerService : NotificationListenerService() {
                     transactionId = processedKey.toTransactionId()
                 )
                 if (recorded) {
-                    Log.i(TAG, "Added expense ${result.amount} to UserStatsStore with category=$category")
+                    Log.i(TAG, "Added approved payment notification to UserStatsStore")
+                    diagnosticStatus = CardNotificationDiagnosticStatus.APPROVED_RECORDED
+                    diagnosticReason = "정상 반영"
                     CardNotificationHandlingStatus.APPROVED_RECORDED
                 } else {
-                    Log.i(TAG, "Ignoring duplicate stored payment transaction: $processedKey")
+                    Log.i(TAG, "Ignoring duplicate stored payment transaction")
+                    diagnosticStatus = CardNotificationDiagnosticStatus.DUPLICATE_IGNORED
+                    diagnosticReason = "중복 알림"
                     CardNotificationHandlingStatus.DUPLICATE_IGNORED
                 }
             } else {
-                Log.i(TAG, "Ignoring duplicate parsed payment notification: $processedKey")
+                Log.i(TAG, "Ignoring duplicate parsed payment notification")
+                diagnosticStatus = CardNotificationDiagnosticStatus.DUPLICATE_IGNORED
+                diagnosticReason = "중복 알림"
                 CardNotificationHandlingStatus.DUPLICATE_IGNORED
             }
         } else {
             when {
                 notificationType == PaymentNotificationType.CANCELED -> {
                     Log.i(TAG, "Ignoring canceled payment notification package=${sbn.packageName}")
+                    diagnosticStatus = CardNotificationDiagnosticStatus.CANCELED
+                    diagnosticReason = "취소 알림"
                     CardNotificationHandlingStatus.CANCELED_IGNORED
                 }
                 result.parseStatus == CardNotificationParseStatus.FAILED || result.amount == null -> {
                     Log.i(TAG, "Payment notification parsing failed package=${sbn.packageName}")
+                    diagnosticStatus = CardNotificationDiagnosticStatus.PARSE_FAILED
+                    diagnosticReason = when {
+                        content.text.isBlank() -> "rawText 추출 부족"
+                        result.amount == null -> "금액 파싱 실패"
+                        result.merchantName.isBlank() -> "점포명 파싱 실패"
+                        else -> "파싱 실패"
+                    }
                     CardNotificationHandlingStatus.PARSE_FAILED
                 }
                 else -> {
                     Log.i(TAG, "Payment notification needs review package=${sbn.packageName}")
+                    diagnosticStatus = CardNotificationDiagnosticStatus.NEEDS_REVIEW
+                    diagnosticReason = "승인/취소 판단 불가"
                     CardNotificationHandlingStatus.NEEDS_REVIEW
                 }
             }
         }
+
+        CardNotificationDebugStore.recordDiagnostic(
+            diagnosticId = diagnosticId,
+            packageName = sbn.packageName,
+            title = content.title,
+            status = diagnosticStatus,
+            reason = diagnosticReason,
+            handled = true,
+            rawText = content.text,
+            allowRawTextPreview = true
+        )
 
         CardNotificationDebugStore.update(
             sourcePackage = sbn.packageName,
@@ -121,10 +186,15 @@ class CardNotificationListenerService : NotificationListenerService() {
             TAG,
             "Handled payment notification: handlingStatus=$handlingStatus, " +
                 "notificationType=$notificationType, parseStatus=${result.parseStatus}, " +
-                "amount=${result.amount}, merchant=${result.merchantName}, " +
-                "category=$category, transactionDateTime=${result.transactionDateTime}"
+                "diagnosticStatus=$diagnosticStatus"
         )
     }
+
+    private fun StatusBarNotification.toDiagnosticId(): String =
+        "${packageName}|$postTime|${id}|${tag.orEmpty()}"
+
+    private fun Notification?.extractTitle(): String =
+        this?.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
 
     private fun Notification.extractContent(): ExtractedNotificationContent {
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
