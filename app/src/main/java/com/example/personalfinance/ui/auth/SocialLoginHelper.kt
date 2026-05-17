@@ -19,6 +19,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 object SocialLoginHelper {
+    private const val GOOGLE_WEB_CLIENT_ID_NOT_CONFIGURED_MESSAGE =
+        "Google Web Client ID가 설정되지 않았습니다."
     
     // ==========================================
     // 카카오 로그인
@@ -67,9 +69,14 @@ object SocialLoginHelper {
         onSuccess: (String) -> Unit,
         onFailure: (Throwable) -> Unit
     ) {
+        val webClientId = com.example.personalfinance.BuildConfig.GOOGLE_WEB_CLIENT_ID.trim()
+        if (webClientId.isBlank()) {
+            Log.w("GOOGLE_LOGIN", GOOGLE_WEB_CLIENT_ID_NOT_CONFIGURED_MESSAGE)
+            onFailure(IllegalStateException(GOOGLE_WEB_CLIENT_ID_NOT_CONFIGURED_MESSAGE))
+            return
+        }
+
         val credentialManager = CredentialManager.create(activity)
-        
-        val webClientId = com.example.personalfinance.BuildConfig.GOOGLE_WEB_CLIENT_ID
 
         val googleIdOption: GetGoogleIdOption = GetGoogleIdOption.Builder()
             .setFilterByAuthorizedAccounts(false)
@@ -94,7 +101,7 @@ object SocialLoginHelper {
                     
                     val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
                     val idToken = googleIdTokenCredential.idToken
-                    Log.i("GOOGLE_LOGIN", "구글 로그인 성공. ID Token: $idToken")
+                    Log.i("GOOGLE_LOGIN", "구글 로그인 성공.")
                     onSuccess(idToken)
                 } else {
                     Log.e("GOOGLE_LOGIN", "예상치 못한 인증 유형입니다.")

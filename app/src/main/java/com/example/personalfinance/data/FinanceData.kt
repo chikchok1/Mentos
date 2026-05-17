@@ -16,9 +16,22 @@ data class CategoryData(
 data class Transaction(
     val store: String,
     val date: String,
-    val amount: Int,
-    val category: String
+    val amount: Long,
+    val category: String,
+    val status: String = TransactionStatus.APPROVED_RECORDED,
+    val source: String = TransactionSource.SAMPLE,
+    val occurredAt: String = date,
+    val id: String = "$source|$occurredAt|$amount|$store"
 )
+
+object TransactionStatus {
+    const val APPROVED_RECORDED = "approved_recorded"
+}
+
+object TransactionSource {
+    const val NOTIFICATION = "notification"
+    const val SAMPLE = "sample"
+}
 
 data class MonthlyData(
     val month: String,
@@ -59,12 +72,22 @@ object SampleData {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fun categoryEmoji(name: String): String = when (name) {
+    // 기존 더미 데이터용 이름
     "음식" -> "🍽️"
     "쇼핑" -> "🛍️"
     "게임" -> "🎮"
     "문화" -> "🎬"
     "뷰티" -> "✨"
-    else  -> "📦"
+    // ExpenseCategoryClassifier 카테고리 표시명
+    "식비/카페"    -> "🍽️"
+    "생활/마트"    -> "🛒"
+    "쇼핑/온라인"  -> "🛍️"
+    "문화/여가"    -> "🎬"
+    "고정비/구독"  -> "📱"
+    "건강/의료"    -> "💊"
+    else           -> "📦"
 }
 
-fun formatWon(amount: Int): String = "₩${String.format("%,d", amount)}"
+fun formatWon(amount: Int): String = formatWon(amount.toLong())
+
+fun formatWon(amount: Long): String = "₩${String.format("%,d", amount)}"

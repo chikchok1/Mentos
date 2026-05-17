@@ -27,7 +27,11 @@ private data class MenuItem(
 )
 
 @Composable
-fun MenuScreen(navController: NavController, onLogout: () -> Unit = {}) {
+fun MenuScreen(
+    navController: NavController,
+    onNotificationDebugClick: () -> Unit = {},
+    onLogout: () -> Unit = {}
+) {
     val menuItems = listOf(
         MenuItem("friends",   "친구",     Icons.Rounded.People,      Blue400),
         MenuItem("shop",      "상점",     Icons.Rounded.Storefront,   CategoryShopping),
@@ -118,14 +122,19 @@ fun MenuScreen(navController: NavController, onLogout: () -> Unit = {}) {
                 color      = Gray500,
                 modifier   = Modifier.padding(bottom = 10.dp)
             )
-            listOf("알림 설정", "프로필 수정", "앱 정보").forEach { label ->
+            listOf(
+                "결제 알림 테스트" to onNotificationDebugClick,
+                "알림 설정" to {},
+                "프로필 수정" to {},
+                "앱 정보" to {}
+            ).forEach { (label, onClick) ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .border(1.dp, Gray200, RoundedCornerShape(16.dp))
-                        .clickable { }
+                        .clickable { onClick() }
                         .padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment     = Alignment.CenterVertically

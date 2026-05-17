@@ -1,15 +1,23 @@
 import java.util.Properties
-import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
-val properties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    properties.load(FileInputStream(localPropertiesFile))
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+fun getLocalProperty(key: String): String {
+    return localProperties.getProperty(key)?.trim() ?: ""
+}
+
+fun toBuildConfigString(value: String): String {
+    return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 }
 
 android {
@@ -24,18 +32,32 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
         vectorDrawables {
             useSupportLibrary = true
         }
-        
-        val kakaoKey = properties.getProperty("KAKAO_NATIVE_APP_KEY") ?: "\"\""
-        val kakaoScheme = properties.getProperty("KAKAO_REDIRECT_SCHEME") ?: "\"\""
-        val googleKey = properties.getProperty("GOOGLE_WEB_CLIENT_ID") ?: "\"\""
 
-        buildConfigField("String", "KAKAO_NATIVE_APP_KEY", kakaoKey)
-        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", googleKey)
-        
-        manifestPlaceholders["KAKAO_REDIRECT_SCHEME"] = kakaoScheme.replace("\"", "")
+        val kakaoNativeAppKey = getLocalProperty("KAKAO_NATIVE_APP_KEY")
+        val kakaoRedirectScheme = getLocalProperty("KAKAO_REDIRECT_SCHEME")
+        val googleWebClientId = getLocalProperty("GOOGLE_WEB_CLIENT_ID")
+
+        println("GOOGLE_WEB_CLIENT_ID length = ${googleWebClientId.length}")
+        println("KAKAO_NATIVE_APP_KEY length = ${kakaoNativeAppKey.length}")
+        println("KAKAO_REDIRECT_SCHEME length = ${kakaoRedirectScheme.length}")
+
+        buildConfigField(
+            "String",
+            "KAKAO_NATIVE_APP_KEY",
+            toBuildConfigString(kakaoNativeAppKey)
+        )
+
+        buildConfigField(
+            "String",
+            "GOOGLE_WEB_CLIENT_ID",
+            toBuildConfigString(googleWebClientId)
+        )
+
+        manifestPlaceholders["KAKAO_REDIRECT_SCHEME"] = kakaoRedirectScheme
     }
 
     buildTypes {
@@ -79,12 +101,12 @@ dependencies {
     // Kakao Login
     implementation("com.kakao.sdk:v2-user:2.20.1")
 
-    // Google Login (Credential Manager)
+    // Google Login - Credential Manager
     implementation("androidx.credentials:credentials:1.2.2")
     implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.0")
 
-    // Network (Retrofit & OkHttp)
+    // Network - Retrofit & OkHttp
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -106,4 +128,6 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    testImplementation("junit:junit:4.13.2")
 }

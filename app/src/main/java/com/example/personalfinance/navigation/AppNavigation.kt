@@ -10,11 +10,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import com.example.personalfinance.data.TokenManager
 import com.example.personalfinance.ui.main.HomeScreen
 import com.example.personalfinance.ui.main.LedgerScreen
 import com.example.personalfinance.ui.main.MenuScreen
 import com.example.personalfinance.ui.main.NewRecordScreen
+import com.example.personalfinance.ui.main.NotificationDebugScreen
 import com.example.personalfinance.ui.auth.LoginScreen
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -24,6 +28,7 @@ sealed class Screen(val route: String) {
     object Ledger    : Screen("ledger")
     object NewRecord : Screen("new_record")
     object Menu      : Screen("menu")
+    object NotificationDebug : Screen("notification_debug")
 }
 
 // ── Navigation Host ───────────────────────────────────────────────────────────
@@ -40,6 +45,7 @@ fun AppNavigation(tokenManager: TokenManager) {
 
     if (startDestination == null) {
         // Token 검증 중일 때 보여줄 스플래시 화면 또는 빈 화면
+        Box(modifier = Modifier.fillMaxSize())
         return
     }
 
@@ -120,6 +126,9 @@ fun AppNavigation(tokenManager: TokenManager) {
         composable(Screen.Menu.route)      { 
             MenuScreen(
                 navController = navController,
+                onNotificationDebugClick = {
+                    navController.navigate(Screen.NotificationDebug.route)
+                },
                 onLogout = {
                     tokenManager.clearTokens()
                     navController.navigate(Screen.Login.route) {
@@ -128,5 +137,6 @@ fun AppNavigation(tokenManager: TokenManager) {
                 }
             )      
         }
+        composable(Screen.NotificationDebug.route) { NotificationDebugScreen(navController) }
     }
 }
