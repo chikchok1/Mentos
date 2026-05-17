@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 object CardNotificationDebugStore {
+    // Debug-only process memory. Do not back this with SharedPreferences because
+    // entries may contain notification text previews.
     private val _latestResult = MutableStateFlow<CardNotificationDebugEntry?>(null)
     val latestResult: StateFlow<CardNotificationDebugEntry?> = _latestResult.asStateFlow()
 
@@ -105,9 +107,30 @@ data class CardNotificationDiagnosticEntry(
 enum class CardNotificationDiagnosticStatus {
     RECEIVED,
     IGNORED_PACKAGE,
+    IGNORED_NON_PAYMENT,
     PARSE_FAILED,
     NEEDS_REVIEW,
     CANCELED,
     DUPLICATE_IGNORED,
     APPROVED_RECORDED
+}
+
+object CardNotificationDiagnosticFilter {
+    fun visibleEntries(
+        entries: List<CardNotificationDiagnosticEntry>,
+        includeIgnored: Boolean
+    ): List<CardNotificationDiagnosticEntry> =
+        if (includeIgnored) {
+            entries
+        } else {
+            entries.filter { it.status in defaultVisibleStatuses }
+        }
+
+    private val defaultVisibleStatuses = setOf(
+        CardNotificationDiagnosticStatus.APPROVED_RECORDED,
+        CardNotificationDiagnosticStatus.CANCELED,
+        CardNotificationDiagnosticStatus.PARSE_FAILED,
+        CardNotificationDiagnosticStatus.NEEDS_REVIEW,
+        CardNotificationDiagnosticStatus.DUPLICATE_IGNORED
+    )
 }

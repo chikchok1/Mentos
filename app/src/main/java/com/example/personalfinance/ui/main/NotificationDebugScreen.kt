@@ -34,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -53,6 +54,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import com.example.personalfinance.notification.CardNotificationDiagnosticEntry
+import com.example.personalfinance.notification.CardNotificationDiagnosticFilter
 import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.notification.CardNotificationDebugEntry
 import com.example.personalfinance.notification.CardNotificationDebugStore
@@ -186,6 +188,7 @@ fun NotificationDebugScreen(navController: NavController) {
                 onTextChange = { manualText = it },
                 analysis = manualAnalysis,
                 onAnalyze = {
+                    // Manual paste tests are analysis-only and must not write to UserStatsStore.
                     manualAnalysis = PaymentNotificationAnalyzer.analyze(
                         sourcePackage = manualPackageName,
                         title = manualTitle,
@@ -366,6 +369,12 @@ private fun PaymentNotificationAnalysisStatus.toDisplayText(): String =
 
 @Composable
 private fun RecentDiagnosticsPanel(entries: List<CardNotificationDiagnosticEntry>) {
+    var showIgnored by remember { mutableStateOf(false) }
+    val visibleEntries = CardNotificationDiagnosticFilter.visibleEntries(
+        entries = entries,
+        includeIgnored = showIgnored
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -374,13 +383,30 @@ private fun RecentDiagnosticsPanel(entries: List<CardNotificationDiagnosticEntry
     ) {
         Text("최근 감지 알림 진단", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("무시된 알림도 보기", style = MaterialTheme.typography.bodyMedium, color = Gray700)
+            Switch(
+                checked = showIgnored,
+                onCheckedChange = { showIgnored = it }
+            )
+        }
+        Spacer(Modifier.height(12.dp))
 
         if (entries.isEmpty()) {
             Text("아직 감지된 알림이 없습니다.", style = MaterialTheme.typography.bodyMedium, color = Gray500)
             return@Column
         }
 
-        entries.forEachIndexed { index, entry ->
+        if (visibleEntries.isEmpty()) {
+            Text("표시할 결제 관련 진단이 없습니다.", style = MaterialTheme.typography.bodyMedium, color = Gray500)
+            return@Column
+        }
+
+        visibleEntries.forEachIndexed { index, entry ->
             if (index > 0) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Gray100)
             }
