@@ -17,6 +17,7 @@ class JwtProvider(
     fun generateAccessToken(userId: Long): String {
         return Jwts.builder()
             .subject(userId.toString())
+            .claim("tokenType", "access")
             .issuedAt(Date())
             .expiration(Date(Date().time + accessExpirationMs))
             .signWith(key)
@@ -26,6 +27,7 @@ class JwtProvider(
     fun generateRefreshToken(userId: Long): String {
         return Jwts.builder()
             .subject(userId.toString())
+            .claim("tokenType", "refresh")
             .issuedAt(Date())
             .expiration(Date(Date().time + refreshExpirationMs))
             .signWith(key)
@@ -36,6 +38,26 @@ class JwtProvider(
         return try {
             Jwts.parser().verifyWith(key).build().parseSignedClaims(token)
             true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun validateRefreshToken(token: String): Boolean {
+        return try {
+            val claims = Jwts.parser().verifyWith(key).build()
+                .parseSignedClaims(token).payload
+            claims["tokenType"] == "refresh"
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun validateAccessToken(token: String): Boolean {
+        return try {
+            val claims = Jwts.parser().verifyWith(key).build()
+                .parseSignedClaims(token).payload
+            claims["tokenType"] == "access"
         } catch (e: Exception) {
             false
         }

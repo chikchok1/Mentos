@@ -2,6 +2,7 @@ package com.mentos.backend.controller
 
 import com.mentos.backend.dto.SocialLoginRequest
 import com.mentos.backend.dto.AuthResponse
+import com.mentos.backend.dto.RefreshTokenRequest
 import com.mentos.backend.entity.User
 import com.mentos.backend.repository.UserRepository
 import com.mentos.backend.security.JwtProvider
@@ -17,6 +18,17 @@ class AuthController(
     private val userRepository: UserRepository,
     private val jwtProvider: JwtProvider
 ) {
+
+    @PostMapping("/refresh")
+    fun refresh(@RequestBody request: RefreshTokenRequest): ResponseEntity<AuthResponse> {
+        if (!jwtProvider.validateRefreshToken(request.refreshToken)) {
+            return ResponseEntity.status(401).build()
+        }
+        val userId = jwtProvider.getUserIdFromToken(request.refreshToken)
+        val newAccessToken  = jwtProvider.generateAccessToken(userId)
+        val newRefreshToken = jwtProvider.generateRefreshToken(userId)
+        return ResponseEntity.ok(AuthResponse(newAccessToken, newRefreshToken))
+    }
 
     @PostMapping("/social-login")
     fun socialLogin(@RequestBody request: SocialLoginRequest): ResponseEntity<AuthResponse> {

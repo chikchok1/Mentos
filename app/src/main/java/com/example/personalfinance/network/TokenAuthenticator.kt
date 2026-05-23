@@ -1,8 +1,6 @@
 package com.example.personalfinance.network
 
 import android.content.Context
-import android.content.Intent
-import com.example.personalfinance.MainActivity
 import com.example.personalfinance.data.TokenManager
 import okhttp3.Authenticator
 import okhttp3.Request
@@ -43,11 +41,7 @@ class TokenAuthenticator(
         // 로컬 토큰 완전 삭제
         tokenManager.clearTokens() 
 
-        // 강제로 MainActivity(로그인 화면으로 라우팅됨)로 이동하여 세션 초기화
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        context.startActivity(intent)
+        // UI navigation should be handled by the UI layer after it observes the cleared token state.
 
         return null
     }

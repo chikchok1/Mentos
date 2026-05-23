@@ -41,22 +41,27 @@ class OAuthService(
             .build()
 
         val response = httpClient.newCall(request).execute()
-        if (!response.isSuccessful) {
+        response.use { resp ->
+        if (!resp.isSuccessful) {
             throw IllegalArgumentException("카카오 토큰 검증에 실패했습니다.")
         }
 
-        val responseBody = response.body?.string() ?: throw IllegalArgumentException("응답이 비어있습니다.")
+        val responseBody = resp.body?.string() ?: throw IllegalArgumentException("응답이 비어있습니다.")
         val json = objectMapper.readTree(responseBody)
         
         val socialId = json.get("id").asText()
-        val kakaoAccount = json.get("kakao_account")
-        val email = if (kakaoAccount.has("email")) kakaoAccount.get("email").asText() else null
+        val email = json.path("kakao_account")
+            .path("email")
+            .takeUnless { it.isMissingNode || it.isNull }
+            ?.asText()
+            ?.takeIf { it.isNotBlank() }
 
         return OAuthUserInfo(
             socialId = socialId,
             email = email,
             provider = "KAKAO"
         )
+        }
     }
 }
 

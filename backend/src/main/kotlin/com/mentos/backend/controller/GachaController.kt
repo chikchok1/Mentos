@@ -17,7 +17,7 @@ class GachaController(
             return ResponseEntity.status(401).body(mapOf("error" to "인증 토큰이 없습니다."))
         }
         val token = authHeader.replace("Bearer ", "")
-        if (!jwtProvider.validateToken(token)) {
+        if (!jwtProvider.validateAccessToken(token)) {
             return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
         }
         val userId = jwtProvider.getUserIdFromToken(token)
@@ -36,7 +36,7 @@ class GachaController(
             return ResponseEntity.status(401).body(mapOf("error" to "인증 토큰이 없습니다."))
         }
         val token = authHeader.replace("Bearer ", "")
-        if (!jwtProvider.validateToken(token)) {
+        if (!jwtProvider.validateAccessToken(token)) {
             return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
         }
         val userId = jwtProvider.getUserIdFromToken(token)

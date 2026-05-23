@@ -1,6 +1,7 @@
 package com.example.personalfinance.navigation
 
 import android.util.Base64
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +46,7 @@ fun AppNavigation(tokenManager: TokenManager) {
     LaunchedEffect(Unit) {
         val token = tokenManager.getAccessToken()
         startDestination = if (token != null) Screen.Home.route else Screen.Login.route
+        Log.i(TAG, "App start auth state: hasAccessToken=${token != null}, startDestination=$startDestination")
     }
 
     if (startDestination == null) {
@@ -71,9 +73,11 @@ fun AppNavigation(tokenManager: TokenManager) {
                         onSuccess = { kakaoToken ->
                             coroutineScope.launch {
                                 try {
+                                    Log.i(TAG, "Requesting backend social-login provider=KAKAO")
                                     val request = com.example.personalfinance.network.SocialLoginRequest(kakaoToken, "KAKAO")
                                     val response = authApi.socialLogin(request)
                                     if (response.isSuccessful && response.body() != null) {
+                                        Log.i(TAG, "Backend social-login succeeded provider=KAKAO")
                                         val authData = response.body()!!
                                         tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
                                         // JWT sub(userId) 추출 후 명시적으로 저장
@@ -82,9 +86,11 @@ fun AppNavigation(tokenManager: TokenManager) {
                                             popUpTo(Screen.Login.route) { inclusive = true }
                                         }
                                     } else {
+                                        Log.w(TAG, "Backend social-login failed provider=KAKAO status=${response.code()}")
                                         android.widget.Toast.makeText(context, "백엔드 로그인 실패", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 } catch (e: Exception) {
+                                    Log.e(TAG, "Backend social-login error provider=KAKAO", e)
                                     android.widget.Toast.makeText(context, "네트워크 오류: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
@@ -102,9 +108,11 @@ fun AppNavigation(tokenManager: TokenManager) {
                             onSuccess = { googleIdToken ->
                                 coroutineScope.launch {
                                     try {
+                                        Log.i(TAG, "Requesting backend social-login provider=GOOGLE")
                                         val request = com.example.personalfinance.network.SocialLoginRequest(googleIdToken, "GOOGLE")
                                         val response = authApi.socialLogin(request)
                                         if (response.isSuccessful && response.body() != null) {
+                                            Log.i(TAG, "Backend social-login succeeded provider=GOOGLE")
                                             val authData = response.body()!!
                                             tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
                                             // JWT sub(userId) 추출 후 명시적으로 저장
@@ -113,9 +121,11 @@ fun AppNavigation(tokenManager: TokenManager) {
                                                 popUpTo(Screen.Login.route) { inclusive = true }
                                             }
                                         } else {
+                                            Log.w(TAG, "Backend social-login failed provider=GOOGLE status=${response.code()}")
                                             android.widget.Toast.makeText(context, "백엔드 로그인 실패", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                     } catch (e: Exception) {
+                                        Log.e(TAG, "Backend social-login error provider=GOOGLE", e)
                                         android.widget.Toast.makeText(context, "네트워크 오류: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 }
@@ -168,3 +178,5 @@ fun extractUserIdFromJwt(token: String): String? {
         null
     }
 }
+
+private const val TAG = "AppNavigation"

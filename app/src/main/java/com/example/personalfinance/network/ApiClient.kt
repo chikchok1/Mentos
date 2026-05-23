@@ -9,16 +9,24 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
-    // TODO: 백엔드 서버의 실제 주소로 변경하세요. (안드로이드 에뮬레이터에서 로컬호스트 접근 시 10.0.2.2 사용)
-    private const val BASE_URL = "http://10.0.2.2:8080/"
+    // URL은 local.properties → BuildConfig.BASE_URL 에서 읽어오므로 코드에 하드코딩하지 않아도 됩니다.
+    // 에뮬레이터: local.properties → BASE_URL=http://10.0.2.2:8080/
+    // 실기기   : local.properties → BASE_URL=http://<PC_IP>:8080/
+    private val BASE_URL = com.example.personalfinance.BuildConfig.BASE_URL
 
     private var retrofit: Retrofit? = null
     private var authApi: AuthApi? = null
 
+    @Synchronized
     fun getAuthApi(context: Context, tokenManager: TokenManager): AuthApi {
         if (authApi == null) {
             val loggingInterceptor = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                redactHeader("Authorization")
+                level = if (com.example.personalfinance.BuildConfig.DEBUG) {
+                    HttpLoggingInterceptor.Level.BODY
+                } else {
+                    HttpLoggingInterceptor.Level.NONE
+                }
             }
 
             val authInterceptor = AuthInterceptor(tokenManager)
@@ -51,6 +59,7 @@ object ApiClient {
     private var gachaApi: GachaApi? = null
     private var classificationApi: ClassificationApi? = null
 
+    @Synchronized
     fun getGachaApi(context: Context, tokenManager: TokenManager): GachaApi {
         getAuthApi(context, tokenManager)
         if (gachaApi == null) {
@@ -59,6 +68,7 @@ object ApiClient {
         return gachaApi!!
     }
 
+    @Synchronized
     fun getClassificationApi(context: Context, tokenManager: TokenManager): ClassificationApi {
         getAuthApi(context, tokenManager)
         if (classificationApi == null) {

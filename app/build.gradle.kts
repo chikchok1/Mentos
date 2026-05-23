@@ -57,6 +57,14 @@ android {
             toBuildConfigString(googleWebClientId)
         )
 
+        val baseUrl = getLocalProperty("BASE_URL")
+            .ifEmpty { "http://10.0.2.2:8080/" }   // 폴백: 에뮬레이터 기본값
+        buildConfigField(
+            "String",
+            "BASE_URL",
+            toBuildConfigString(baseUrl)
+        )
+
         manifestPlaceholders["KAKAO_REDIRECT_SCHEME"] = kakaoRedirectScheme
     }
 
