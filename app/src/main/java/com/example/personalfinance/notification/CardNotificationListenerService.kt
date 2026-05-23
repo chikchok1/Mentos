@@ -12,12 +12,23 @@ import com.example.personalfinance.data.TokenManager
 import com.example.personalfinance.network.ApiClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class CardNotificationListenerService : NotificationListenerService() {
+
+    // [FIX #6] 서비스 생명쿈에 한 번만 생성하고 onDestroy에서 cancel
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     override fun onListenerConnected() {
         super.onListenerConnected()
         Log.i(TAG, "Notification listener connected for test payment notifications.")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceScope.cancel()   // [FIX #6] 서비스 종료 시 코루틴 정리
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -106,7 +117,7 @@ class CardNotificationListenerService : NotificationListenerService() {
                 text = content.text
             )
         }
-        val serviceScope = CoroutineScope(Dispatchers.IO)
+        val serviceScope = this.serviceScope
         serviceScope.launch {
             // 1차: 로컬 키워드 매칭
             var category = ExpenseCategoryClassifier.classify(

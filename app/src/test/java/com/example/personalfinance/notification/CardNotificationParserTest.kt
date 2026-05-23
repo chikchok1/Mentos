@@ -138,6 +138,18 @@ class CardNotificationParserTest {
         assertEquals(CardNotificationParseStatus.SUCCESS, result.parseStatus)
     }
 
+    @Test
+    fun parse_usesPreviousYearForDecemberNotificationWhenReferenceDateIsJanuary() {
+        val result = CardNotificationParser.parse(
+            title = "card",
+            text = "12/31 23:50 TESTSTORE 12,300원 결제",
+            referenceDate = LocalDate.of(2027, 1, 1)
+        )
+
+        assertEquals(12_300L, result.amount)
+        assertEquals(LocalDateTime.of(2026, 12, 31, 23, 50), result.transactionDateTime)
+    }
+
     private data class Sample(
         val title: String,
         val text: String,

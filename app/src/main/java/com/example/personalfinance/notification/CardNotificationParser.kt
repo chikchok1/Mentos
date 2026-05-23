@@ -7,9 +7,9 @@ object CardNotificationParser {
     private val amountPattern = Regex("""([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*원""")
     private val dateTimePattern = Regex("""(\d{2})/(\d{2})\s+(\d{1,2}):(\d{2})""")
     private val bracketTagPattern = Regex("""^\[[^\]]+]\s*""")
-    private val balanceInfoPattern = Regex("""잔액\s*[0-9]{1,3}(?:,[0-9]{3})*원?""")
+    private val balanceInfoPattern = Regex("""(?:남은\s*)?(?:지원금|잔액|잔여금|포인트잔액|잔여)\s*[0-9]{1,3}(?:,[0-9]{3})*원?""")
     private val accountCardWordPattern = Regex("""(토스뱅크|체크카드|신용카드|카드|계좌|잔액)""")
-    private val balanceAmountKeywords = listOf("잔액", "잔여", "남은 금액", "보유금액")
+    private val balanceAmountKeywords = listOf("잔액", "잔여", "남은 금액", "보유금액", "남은 지원금", "지원금", "잔여금", "포인트잔액")
     private val paymentAmountKeywords = listOf("결제", "승인", "사용", "출금")
     private val merchantCleanupPattern = Regex(
         """^(샘플\s*결제|체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)\s*|\s*(체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)$"""
@@ -63,7 +63,15 @@ object CardNotificationParser {
         val hour = match.groupValues[3].toInt()
         val minute = match.groupValues[4].toInt()
 
-        return LocalDateTime.of(referenceDate.year, month, day, hour, minute)
+        val transactionYear = if (referenceDate.monthValue == 1 && month == 12) {
+            referenceDate.year - 1
+        } else {
+            referenceDate.year
+        }
+
+        return runCatching {
+            LocalDateTime.of(transactionYear, month, day, hour, minute)
+        }.getOrNull()
     }
 
     private fun extractMerchantName(text: String, amountRange: IntRange): String {
@@ -85,9 +93,15 @@ object CardNotificationParser {
             isBalanceAmountCandidate(text, match)
         }
 
-        return paymentCandidates.firstOrNull { match ->
+        // 결제 키워드 근처 매칭 우선
+        val nearKeyword = paymentCandidates.firstOrNull { match ->
             hasPaymentKeywordNear(text, match.range)
-        } ?: paymentCandidates.firstOrNull()
+        }
+        if (nearKeyword != null) return nearKeyword
+
+        // 결제 키워드 근처가 없으면 — 잔액 키워드 없는 후보 중 마지막 금액 선택
+        // ("남은 지원금 122,920원 2,800원" 구조에서 실결제는 뒤에 오는 경향)
+        return paymentCandidates.lastOrNull()
     }
 
     private fun isBalanceAmountCandidate(text: String, match: MatchResult): Boolean {
