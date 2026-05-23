@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -24,7 +25,16 @@ object SamplePaymentNotification {
             ) == PackageManager.PERMISSION_GRANTED
 
     fun show(context: Context): Boolean {
-        if (!canPostNotifications(context)) return false
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w(TAG, "POST_NOTIFICATIONS permission is not granted. Skip sample notification.")
+            return false
+        }
 
         ensureChannel(context)
 
@@ -73,4 +83,5 @@ object SamplePaymentNotification {
 
     private const val CHANNEL_ID = "sample_payment_notifications"
     private const val SAMPLE_NOTIFICATION_ID = 20260513
+    private const val TAG = "SamplePaymentNotification"
 }
