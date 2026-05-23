@@ -8,15 +8,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
+import com.example.personalfinance.data.UserStatsCalculator
+import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.ui.theme.*
 
 private data class MenuItem(
@@ -38,6 +44,16 @@ fun MenuScreen(
         MenuItem("gacha",     "가챠",     Icons.Rounded.AutoAwesome,  CategoryCulture),
         MenuItem("inventory", "인벤토리", Icons.Rounded.Inventory2,   CategoryFood),
     )
+
+    val context    = LocalContext.current
+    val store      = remember { UserStatsStore.getInstance(context) }
+    val userStats  by store.statsFlow.collectAsState()
+    val level      = userStats.currentLevel
+    val xp         = userStats.currentXP
+    val levelTitle = UserStatsCalculator.levelTitle(level)
+    val currentJob = UserStatsCalculator.determineJob(userStats.categorySpending)
+    val jobTitle   = UserStatsCalculator.jobTitle(currentJob)
+    val itemCount  by store.transactionsFlow.collectAsState()
 
     Column(
         modifier = Modifier
@@ -73,9 +89,9 @@ fun MenuScreen(
             ) { Text("👤", fontSize = 28.sp) }
             Spacer(Modifier.width(16.dp))
             Column {
-                Text("사용자님", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text("사용자님", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold) // 실제 이름은 백엔드 연동 시 추가
                 Text(
-                    "Lv.3 • 초보 모험가",
+                    "Lv.$level $levelTitle · $jobTitle",
                     style    = MaterialTheme.typography.bodyMedium,
                     color    = Gray500,
                     modifier = Modifier.padding(top = 4.dp)
@@ -185,7 +201,7 @@ fun MenuScreen(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    listOf("3" to "레벨", "450" to "XP", "12" to "아이템").forEach { (value, label) ->
+                    listOf("$level" to "레벨", "$xp" to "XP", "${itemCount.size}" to "아이템").forEach { (value, label) ->
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                             Text(label, style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(top = 4.dp))

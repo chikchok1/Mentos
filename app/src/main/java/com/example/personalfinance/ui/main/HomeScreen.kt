@@ -19,9 +19,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.navigation.Screen
 import com.example.personalfinance.ui.components.PixelCharacter
 import com.example.personalfinance.ui.theme.*
+import java.time.YearMonth
+import java.time.LocalDateTime
 
 @Composable
 fun HomeScreen(navController: NavController) {
@@ -32,15 +35,30 @@ fun HomeScreen(navController: NavController) {
 
     val currentLevel      = userStats.currentLevel
     val currentXP         = userStats.currentXP
-    val nextLevelXP       = userStats.nextLevelXP
-    val xpProgress        = if (nextLevelXP > 0) {
-        (currentXP.toFloat() / nextLevelXP).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
+    val xpProgress        = UserStatsCalculator.levelProgress(currentXP)
+    val (xpInLevel, xpToNext) = UserStatsCalculator.levelProgressXP(currentXP)
     val thisMonthSpending = userStats.thisMonthSpending
-    val lastMonthChange   = -12
+    val storedTransactions by store.transactionsFlow.collectAsState()
+    // [FIX #4] 지난달 대비 변화율을 실제 거래 데이터에서 계산
+    val lastMonthChange: Int? = remember(storedTransactions) {
+        val now = YearMonth.now()
+        val lastMonth = now.minusMonths(1)
+        fun sumForMonth(ym: YearMonth) = storedTransactions
+            .filter { tx ->
+                runCatching {
+                    YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate()) == ym
+                }.getOrDefault(false)
+            }
+            .sumOf { it.amount }
+        val thisSum  = sumForMonth(now)
+        val lastSum  = sumForMonth(lastMonth)
+        if (lastSum == 0L) null   // 지난달 데이터 없으면 null
+        else ((thisSum - lastSum).toFloat() / lastSum * 100).toInt()
+    }
     val topCategory       = userStats.topCategory
+    val currentJob        = UserStatsCalculator.determineJob(userStats.categorySpending)
+    val jobTitle          = UserStatsCalculator.jobTitle(currentJob)
+    val levelTitle        = UserStatsCalculator.levelTitle(currentLevel)
 
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
@@ -68,7 +86,7 @@ fun HomeScreen(navController: NavController) {
             // Header
             Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp)) {
                 Text(
-                    text  = "2026년 4월 16일",
+                    text  = java.time.LocalDate.now().let { "${it.year}년 ${it.monthValue}월 ${it.dayOfMonth}일" },
                     style = MaterialTheme.typography.bodyMedium,
                     color = Gray500
                 )
@@ -90,11 +108,11 @@ fun HomeScreen(navController: NavController) {
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    PixelCharacter(level = currentLevel, job = "beginner")
+                    PixelCharacter(level = currentLevel, job = currentJob)
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Level badge
+                    // Level badge + 직업명
                     Box(
                         modifier = Modifier
                             .background(
@@ -104,7 +122,7 @@ fun HomeScreen(navController: NavController) {
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text       = "Lv.$currentLevel",
+                            text       = "Lv.$currentLevel $levelTitle · $jobTitle",
                             style      = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color      = Blue500
@@ -126,7 +144,7 @@ fun HomeScreen(navController: NavController) {
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text  = "$currentXP / $nextLevelXP XP",
+                        text  = "$xpInLevel / $xpToNext XP",
                         style = MaterialTheme.typography.bodySmall,
                         color = Gray400
                     )
@@ -177,20 +195,31 @@ fun HomeScreen(navController: NavController) {
 
                         // Insight row 1 — monthly change
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+                            val isDown = (lastMonthChange ?: 0) <= 0
                             Box(
-                                modifier         = Modifier.size(36.dp).background(Color(0xFFDCFCE7), CircleShape),
+                                modifier         = Modifier.size(36.dp).background(
+                                    if (isDown) Color(0xFFDCFCE7) else Color(0xFFFFE4E6), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Rounded.TrendingDown, null, tint = GreenSuccess, modifier = Modifier.size(18.dp))
+                                Icon(
+                                    if (isDown) Icons.Rounded.TrendingDown else Icons.Rounded.TrendingUp,
+                                    null,
+                                    tint     = if (isDown) GreenSuccess else RedDanger,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                             Spacer(Modifier.width(12.dp))
-                            Text("지난달 대비 ", style = MaterialTheme.typography.bodyMedium, color = Gray700)
-                            Text(
-                                "${lastMonthChange}%",
-                                style      = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color      = GreenSuccess
-                            )
+                            if (lastMonthChange == null) {
+                                Text("지난달 데이터 없음", style = MaterialTheme.typography.bodyMedium, color = Gray500)
+                            } else {
+                                Text("지난달 대비 ", style = MaterialTheme.typography.bodyMedium, color = Gray700)
+                                Text(
+                                    "${if (lastMonthChange >= 0) "+" else ""}${lastMonthChange}%",
+                                    style      = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color      = if (isDown) GreenSuccess else RedDanger
+                                )
+                            }
                         }
 
                         // Insight row 2 — top category

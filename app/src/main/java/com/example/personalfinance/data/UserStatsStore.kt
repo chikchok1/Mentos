@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.time.LocalDateTime
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,19 +28,129 @@ data class UserStats(
 }
 
 object UserStatsCalculator {
+    // 레벨 → 해당 레벨 도달에 필요한 누적 XP
     private val levelThresholds = listOf(
-        1 to 0,
-        2 to 100,
-        3 to 300,
-        4 to 700,
-        5 to 1200
+        1  to 0,
+        2  to 50,
+        3  to 120,
+        4  to 220,
+        5  to 350,      // 견습 모험가
+        6  to 500,
+        7  to 670,
+        8  to 860,
+        9  to 1_070,
+        10 to 1_300,    // 숙련 모험가
+        12 to 1_600,
+        14 to 1_950,
+        16 to 2_350,
+        18 to 2_800,
+        20 to 3_300,    // 전문가
+        23 to 3_900,
+        26 to 4_600,
+        28 to 5_100,
+        30 to 5_700,    // 명인
+        35 to 6_800,
+        40 to 8_100,
+        45 to 9_600,
+        50 to 11_000    // 마스터
     )
 
-    fun calculateEarnedXP(amount: Long): Int {
+    // 레벨별 칭호
+    fun levelTitle(level: Int): String = when {
+        level >= 50 -> "마스터"
+        level >= 30 -> "명인"
+        level >= 20 -> "전문가"
+        level >= 10 -> "숙련 모험가"
+        level >= 5  -> "견습 모험가"
+        else        -> "초보 모험가"
+    }
+
+    // 카테고리 누적 지출 → 직업
+    fun determineJob(categorySpending: Map<String, Long>): String {
+        val top = categorySpending.filterValues { it > 0L }.maxByOrNull { it.value }?.key
+            ?: return "beginner"
+        return when (top) {
+            ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE         -> "cook"        // 요리사
+            ExpenseCategoryClassifier.CATEGORY_LIVING_MART       -> "manager"     // 생활관리사
+            ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE   -> "merchant"    // 상인
+            ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE   -> "artist"      // 예술가
+            ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> "planner"    // 관리자
+            ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL    -> "healer"      // 힐러
+            else                                                  -> "beginner"
+        }
+    }
+
+    // 직업 한글명
+    fun jobTitle(job: String): String = when (job) {
+        "cook"     -> "요리사"
+        "manager"  -> "생활관리사"
+        "merchant" -> "상인"
+        "artist"   -> "예술가"
+        "planner"  -> "관리자"
+        "healer"   -> "힐러"
+        else       -> "모험가"
+    }
+
+    /**
+     * 소비 기반 XP 계산 (SFR-301, SFR-302)
+     * - 기본 XP: 결제 1건당 10
+     * - 금액 보너스: 1만원당 +10, 최대 +100
+     * - 예산 달성 보정:
+     *     이번 달 지출이 예산 80% 이하  → 정상 지급
+     *     이번 달 지출이 예산 80~100%  → 50%만 지급
+     *     이번 달 지출이 예산 초과      → 최소 5 XP만 지급
+     */
+    fun calculateEarnedXP(
+        amount: Long,
+        thisMonthSpending: Long = 0L,
+        monthlyBudget: Long = 1_500_000L
+    ): Int {
+        val baseXP = BASE_EXPENSE_XP
         val amountXP = ((amount.coerceAtLeast(0L) / 10_000L) * 10L)
             .coerceAtMost(100L)
             .toInt()
-        return BASE_EXPENSE_XP + amountXP
+        val rawXP = baseXP + amountXP
+
+        val budgetRatio = if (monthlyBudget > 0) {
+            thisMonthSpending.toFloat() / monthlyBudget.toFloat()
+        } else 1f
+
+        return when {
+            budgetRatio > 1.0f -> MINIMUM_XP                        // 예산 초과
+            budgetRatio > 0.8f -> (rawXP * 0.5f).toInt().coerceAtLeast(MINIMUM_XP) // 80~100%
+            else               -> rawXP                             // 80% 이하 정상
+        }
+    }
+
+    /**
+     * 현재 레벨 구간 내 진행률 (0.0 ~ 1.0)
+     * 예) Lv.5(350XP) ~ Lv.6(500XP) 사이에서 totalXP=400 이면 (400-350)/(500-350) = 0.33
+     * 마스터(Lv.50) 도달 시 1.0 반환
+     */
+    fun levelProgress(totalXP: Int): Float {
+        val normalizedXP = totalXP.coerceAtLeast(0)
+        val currentLevelThreshold = levelThresholds.last { (_, xp) -> normalizedXP >= xp }.second
+        val nextLevelThreshold = levelThresholds
+            .firstOrNull { (_, xp) -> normalizedXP < xp }
+            ?.second
+            ?: return 1f  // 마스터 도달
+        val range = (nextLevelThreshold - currentLevelThreshold).toFloat()
+        return if (range <= 0f) 1f
+        else ((normalizedXP - currentLevelThreshold).toFloat() / range).coerceIn(0f, 1f)
+    }
+
+    /**
+     * 현재 레벨 내 진행 XP / 다음 레벨까지 필요 XP (UI 표시용)
+     * 예) "50 / 150 XP"
+     */
+    fun levelProgressXP(totalXP: Int): Pair<Int, Int> {
+        val normalizedXP = totalXP.coerceAtLeast(0)
+        val currentLevelThreshold = levelThresholds.last { (_, xp) -> normalizedXP >= xp }.second
+        val nextLevelThreshold = levelThresholds
+            .firstOrNull { (_, xp) -> normalizedXP < xp }
+            ?.second
+            ?: return (levelThresholds.last().second to levelThresholds.last().second)
+        return (normalizedXP - currentLevelThreshold) to (nextLevelThreshold - currentLevelThreshold)
     }
 
     fun calculateLevel(totalXP: Int): Int {
@@ -56,6 +167,7 @@ object UserStatsCalculator {
     }
 
     private const val BASE_EXPENSE_XP = 10
+    private const val MINIMUM_XP = 5
 }
 
 class UserStatsStore private constructor(context: Context) {
@@ -74,13 +186,24 @@ class UserStatsStore private constructor(context: Context) {
             prefs.getInt(KEY_XP, 0)
         }
 
+        val transactions = loadTransactions()
+        val thisMonth = YearMonth.now()
+        val thisMonthTransactions = transactions.filter { tx ->
+            runCatching {
+                YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate())
+            }.getOrNull() == thisMonth
+        }
+        val thisMonthSpending = thisMonthTransactions.sumOf { it.amount }
+        val thisMonthCategorySpending = ExpenseCategoryClassifier.categories
+            .associateWith { cat -> thisMonthTransactions.filter { it.category == cat }.sumOf { it.amount } }
+
         return UserStats(
             currentLevel = UserStatsCalculator.calculateLevel(totalXP),
             currentXP = totalXP,
             nextLevelXP = UserStatsCalculator.nextLevelThreshold(totalXP),
-            thisMonthSpending = prefs.getLong(KEY_SPENDING, 0L),
-            categorySpending = loadCategorySpending(),
-            transactions = loadTransactions()
+            thisMonthSpending = thisMonthSpending,
+            categorySpending = thisMonthCategorySpending,
+            transactions = transactions
         )
     }
 
@@ -132,11 +255,22 @@ class UserStatsStore private constructor(context: Context) {
             return false
         }
 
-        val newSpending = current.thisMonthSpending + amount
-        val newTotalXP = current.currentXP + UserStatsCalculator.calculateEarnedXP(amount)
-        val newCategorySpending = current.categorySpending.toMutableMap().apply {
-            this[normalizedCategory] = (this[normalizedCategory] ?: 0L) + amount
+        // 이번 달 트랜잭션만 필터링해서 지출/카테고리 재계산
+        val thisMonth = YearMonth.now()
+        val thisMonthTxs = newTransactions.filter { tx ->
+            runCatching {
+                YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate())
+            }.getOrNull() == thisMonth
         }
+        val newSpending = thisMonthTxs.sumOf { it.amount }
+        val newCategorySpending = ExpenseCategoryClassifier.categories
+            .associateWith { cat -> thisMonthTxs.filter { it.category == cat }.sumOf { it.amount } }
+
+        val newTotalXP = current.currentXP + UserStatsCalculator.calculateEarnedXP(
+            amount = amount,
+            thisMonthSpending = newSpending,
+            monthlyBudget = 1_500_000L
+        )
 
         val newStats = UserStats(
             currentLevel = UserStatsCalculator.calculateLevel(newTotalXP),
@@ -160,8 +294,15 @@ class UserStatsStore private constructor(context: Context) {
             return 0
         }
 
+        val thisMonth = YearMonth.now()
+        val thisMonthTxs = result.transactions.filter { tx ->
+            runCatching {
+                YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate())
+            }.getOrNull() == thisMonth
+        }
         val newStats = current.copy(
-            categorySpending = StoredTransactionReclassifier.calculateCategorySpending(result.transactions),
+            thisMonthSpending = thisMonthTxs.sumOf { it.amount },
+            categorySpending = StoredTransactionReclassifier.calculateCategorySpending(thisMonthTxs),
             transactions = result.transactions
         )
 
