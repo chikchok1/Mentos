@@ -139,6 +139,26 @@ class CardNotificationParserTest {
     }
 
     @Test
+    fun parse_keepsSupportFundPaymentAmountAndIgnoresRemainingSupportFund() {
+        val result = CardNotificationParser.parse(
+            title = "고유가 피해지원금 45,800원 결제",
+            text = """
+                고유가 피해지원금 45,800원 결제 토스뱅크 체크카드 |
+                (주) 용가부산서면
+                남은 지원금 14,120원 토스뱅크
+            """.trimIndent(),
+            referenceDate = referenceDate
+        )
+
+        assertEquals(45_800L, result.amount)
+        assertEquals("(주) 용가부산서면", result.merchantName)
+        assertEquals(CardNotificationParseStatus.SUCCESS, result.parseStatus)
+        assertFalse(result.amount == 14_120L)
+        assertFalse(result.merchantName.contains("남은 지원금"))
+        assertFalse(result.merchantName.contains("14,120"))
+    }
+
+    @Test
     fun parse_usesPreviousYearForDecemberNotificationWhenReferenceDateIsJanuary() {
         val result = CardNotificationParser.parse(
             title = "card",

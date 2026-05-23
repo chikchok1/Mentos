@@ -4,12 +4,15 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 object CardNotificationParser {
-    private val amountPattern = Regex("""([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*원""")
+    private const val AMOUNT_TEXT_PATTERN = """[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+"""
+
+    private val amountPattern = Regex("""($AMOUNT_TEXT_PATTERN)\s*원""")
     private val dateTimePattern = Regex("""(\d{2})/(\d{2})\s+(\d{1,2}):(\d{2})""")
     private val bracketTagPattern = Regex("""^\[[^\]]+]\s*""")
-    private val balanceInfoPattern = Regex("""(?:남은\s*)?(?:지원금|잔액|잔여금|포인트잔액|잔여)\s*[0-9]{1,3}(?:,[0-9]{3})*원?""")
+    private val balanceInfoPattern = Regex(
+        """(?:(?:남은|잔여)\s*(?:지원금|금액|포인트)?|지원금\s*잔액|포인트\s*잔액|잔액|잔여금|보유금액)\s*[:：]?\s*(?:$AMOUNT_TEXT_PATTERN)\s*원?"""
+    )
     private val accountCardWordPattern = Regex("""(토스뱅크|체크카드|신용카드|카드|계좌|잔액)""")
-    private val balanceAmountKeywords = listOf("잔액", "잔여", "남은 금액", "보유금액", "남은 지원금", "지원금", "잔여금", "포인트잔액")
     private val paymentAmountKeywords = listOf("결제", "승인", "사용", "출금")
     private val merchantCleanupPattern = Regex(
         """^(샘플\s*결제|체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)\s*|\s*(체크승인|일시불\s*승인|승인취소|결제취소|매출취소|체크카드|신용카드|정기결제|자동납부|승인|결제|사용|취소|환불)$"""
@@ -105,10 +108,12 @@ object CardNotificationParser {
     }
 
     private fun isBalanceAmountCandidate(text: String, match: MatchResult): Boolean {
-        val line = text.lineContaining(match.range)
+        val lineRange = text.lineRangeContaining(match.range)
+        val line = text.substring(lineRange)
+        val relativeAmountRange = (match.range.first - lineRange.first)..(match.range.last - lineRange.first)
 
-        return balanceAmountKeywords.any { keyword ->
-            normalizeKeywordContext(line).contains(normalizeKeywordContext(keyword))
+        return balanceInfoPattern.findAll(line).any { balanceMatch ->
+            balanceMatch.range.overlaps(relativeAmountRange)
         }
     }
 
@@ -126,7 +131,7 @@ object CardNotificationParser {
     private fun String.localContext(start: Int, end: Int): String =
         substring(start, end.coerceAtLeast(start))
 
-    private fun String.lineContaining(range: IntRange): String {
+    private fun String.lineRangeContaining(range: IntRange): IntRange {
         val lineStart = lastIndexOf('\n', startIndex = range.first).let { index ->
             if (index == -1) 0 else index + 1
         }
@@ -134,11 +139,14 @@ object CardNotificationParser {
             if (index == -1) length else index
         }
 
-        return substring(lineStart, lineEnd)
+        return lineStart until lineEnd
     }
 
     private fun normalizeKeywordContext(value: String): String =
         value.filterNot { it.isWhitespace() }
+
+    private fun IntRange.overlaps(other: IntRange): Boolean =
+        first <= other.last && other.first <= last
 
     private fun String.cleanMerchantCandidate(): String {
         val withoutBalance = replace(balanceInfoPattern, " ")
