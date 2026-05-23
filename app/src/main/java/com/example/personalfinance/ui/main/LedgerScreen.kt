@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import java.time.YearMonth
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,36 +26,65 @@ import com.example.personalfinance.ui.theme.*
 // ── 카테고리 이름 매핑 (ExpenseCategoryClassifier → 화면 표시용) ───────────────────
 
 private fun classifierCategoryToDisplayName(category: String): String = when (category) {
-    ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE        -> "식비/카페"
-    ExpenseCategoryClassifier.CATEGORY_LIVING_MART      -> "생활/마트"
-    ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE  -> "쇼핑/온라인"
-    ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE  -> "문화/여가"
+    ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE          -> "식비/카페"
+    ExpenseCategoryClassifier.CATEGORY_LIVING_MART        -> "생활/마트"
+    ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE    -> "쇼핑/온라인"
+    ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE    -> "문화/여가"
     ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> "고정비/구독"
-    ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL   -> "건강/의료"
-    else                                                 -> "기타"
+    ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL     -> "건강/의료"
+    else                                                   -> "기타"
 }
 
 private fun categoryColorFor(category: String): Color = when (category) {
-    ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE        -> CategoryFood
-    ExpenseCategoryClassifier.CATEGORY_LIVING_MART      -> CategoryShopping
-    ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE  -> CategoryGame
-    ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE  -> CategoryCulture
+    ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE          -> CategoryFood
+    ExpenseCategoryClassifier.CATEGORY_LIVING_MART        -> CategoryShopping
+    ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE    -> CategoryGame
+    ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE    -> CategoryCulture
     ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> CategoryBeauty
-    ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL   -> Color(0xFF34D399)
-    else                                                 -> CategoryOther
+    ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL     -> Color(0xFF34D399)
+    else                                                   -> CategoryOther
 }
 
 private fun categoryEmojiForClassifier(category: String): String = when (category) {
-    ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE        -> "🍽️"
-    ExpenseCategoryClassifier.CATEGORY_LIVING_MART      -> "🛒"
-    ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE  -> "🛍️"
-    ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE  -> "🎬"
+    ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE          -> "🍽️"
+    ExpenseCategoryClassifier.CATEGORY_LIVING_MART        -> "🛒"
+    ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE    -> "🛍️"
+    ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE    -> "🎬"
     ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> "📱"
-    ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL   -> "💊"
-    else                                                 -> "📦"
+    ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL     -> "💊"
+    else                                                   -> "📦"
 }
 
-// ── UserStats → CategoryData 변환 ────────────────────────────────────────────
+// ── 실제 거래 데이터를 월별로 집계해 TrendsTab에 넘기는 함수 ──────────────────────
+
+private fun buildMonthlyData(transactions: List<Transaction>): List<MonthlyData> {
+    val monthNames = listOf("", "1월", "2월", "3월", "4월", "5월", "6월",
+                             "7월", "8월", "9월", "10월", "11월", "12월")
+    val now = YearMonth.now()
+    // 최근 6개월 집계
+    val built = (5 downTo 0).map { offset ->
+        val ym = now.minusMonths(offset.toLong())
+        val total = transactions
+            .filter { tx ->
+                runCatching {
+                    YearMonth.from(java.time.LocalDateTime.parse(tx.occurredAt).toLocalDate()) == ym
+                }.getOrDefault(false)
+            }
+            .sumOf { it.amount }
+            .toInt()
+        MonthlyData(
+            month  = if (ym.year == now.year) monthNames[ym.monthValue] else "${ym.monthValue}월",
+            amount = total
+        )
+    }.filter { it.amount > 0 }
+
+    // 데이터가 없으면 현재 월만 0으로 표시
+    return built.ifEmpty {
+        listOf(MonthlyData(monthNames[now.monthValue], 0))
+    }
+}
+
+// ── transactions 기반 CategoryData 빌드 ──────────────────────────────────────
 
 private fun buildCategoriesFromStats(
     categorySpending: Map<String, Long>,
@@ -76,6 +106,8 @@ private fun buildCategoriesFromStats(
         .sortedByDescending { it.value }
 }
 
+// ── LedgerScreen ──────────────────────────────────────────────────────────────
+
 @Composable
 fun LedgerScreen(navController: NavController) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -86,13 +118,27 @@ fun LedgerScreen(navController: NavController) {
     var selectedTab      by remember { mutableStateOf(0) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var budgetEnabled    by remember { mutableStateOf(true) }
+    var currentMonth     by remember { mutableStateOf(YearMonth.now()) }
 
-    // ── 실제 파싱 데이터에서 빌드 ────────────────────────────────────────────
-    val transactions = storedTransactions
-    val categories   = buildCategoriesFromStats(stats.categorySpending, transactions)
-    val monthlyData  = SampleData.monthly
+    // ── currentMonth 기준으로 거래 필터링 ────────────────────────────────────
+    val transactions = storedTransactions.filter {
+        val txMonth = runCatching {
+            YearMonth.from(java.time.LocalDateTime.parse(it.occurredAt).toLocalDate())
+        }.getOrNull()
+        txMonth == null || txMonth == currentMonth
+    }
 
-    val totalSpending        = stats.thisMonthSpending.toInt()
+    // [FIX #2] stats.categorySpending(이번 달 고정) 대신
+    //          필터된 transactions에서 직접 카테고리/합계 집계
+    val categorySpendingForMonth = transactions
+        .groupBy { it.category }
+        .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+    val categories    = buildCategoriesFromStats(categorySpendingForMonth, transactions)
+    val totalSpending = transactions.sumOf { it.amount }.toInt()
+
+    // [FIX #5] SampleData.monthly 대신 실제 거래 데이터로 월별 집계
+    val monthlyData = buildMonthlyData(storedTransactions)
+
     val monthlyBudget        = 1_500_000
     val budgetUsedPercentage = totalSpending.toFloat() / monthlyBudget * 100f
     val remainingBudget      = monthlyBudget - totalSpending
@@ -103,7 +149,7 @@ fun LedgerScreen(navController: NavController) {
 
     Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
 
-        // ── Header ────────────────────────────────────────────────────────────
+        // ── Header ───────────────────────────────────────────────────────────
         Row(
             modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -113,16 +159,22 @@ fun LedgerScreen(navController: NavController) {
                 Icon(Icons.Rounded.Close, null, tint = Gray600)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { }) {
+                IconButton(onClick = {
+                    currentMonth = currentMonth.minusMonths(1)
+                    selectedCategory = null
+                }) {
                     Icon(Icons.Rounded.KeyboardArrowLeft, null, tint = Gray600)
                 }
                 Text(
-                    text      = "2026년 4월",
+                    text      = "${currentMonth.year}년 ${currentMonth.monthValue}월",
                     style     = MaterialTheme.typography.titleMedium,
                     modifier  = Modifier.width(120.dp),
                     textAlign = TextAlign.Center
                 )
-                IconButton(onClick = { }) {
+                IconButton(onClick = {
+                    currentMonth = currentMonth.plusMonths(1)
+                    selectedCategory = null
+                }) {
                     Icon(Icons.Rounded.KeyboardArrowRight, null, tint = Gray600)
                 }
             }
@@ -160,11 +212,12 @@ fun LedgerScreen(navController: NavController) {
         ) {
             when (selectedTab) {
                 0 -> LedgerTab(
-                    categories          = categories,
-                    transactions        = filteredTransactions,
-                    selectedCategory    = selectedCategory,
-                    totalSpending       = totalSpending,
-                    onCategoryClick     = { cat ->
+                    categories       = categories,
+                    transactions     = filteredTransactions,
+                    selectedCategory = selectedCategory,
+                    totalSpending    = totalSpending,
+                    currentMonth     = currentMonth,
+                    onCategoryClick  = { cat ->
                         selectedCategory = if (selectedCategory == cat) null else cat
                     }
                 )
@@ -178,7 +231,7 @@ fun LedgerScreen(navController: NavController) {
     }
 }
 
-// ── Tab 1: 가계부 ──────────────────────────────────────────────────────────────
+// ── Tab 1: 가계부 ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun LedgerTab(
@@ -186,6 +239,7 @@ private fun LedgerTab(
     transactions: List<Transaction>,
     selectedCategory: String?,
     totalSpending: Int,
+    currentMonth: YearMonth,
     onCategoryClick: (String) -> Unit
 ) {
     // 데이터가 없을 때 안내 화면
@@ -216,6 +270,8 @@ private fun LedgerTab(
     }
 
     val total = totalSpending.toLong().coerceAtLeast(1L)
+    val isCurrentMonth = currentMonth == YearMonth.now()
+    val chartLabel = if (isCurrentMonth) "이번 달 총 지출" else "${currentMonth.monthValue}월 총 지출"
 
     // Donut chart
     Box(
@@ -239,7 +295,7 @@ private fun LedgerTab(
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("이번 달 총 지출", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                Text(chartLabel, style = MaterialTheme.typography.bodySmall, color = Gray500)
                 Text(
                     "₩${String.format("%,d", total)}",
                     style      = MaterialTheme.typography.titleLarge,
@@ -252,8 +308,8 @@ private fun LedgerTab(
     // Category legend grid (3 columns)
     val rows = categories.chunked(3)
     Column(
-        modifier             = Modifier.padding(horizontal = 24.dp),
-        verticalArrangement  = Arrangement.spacedBy(10.dp)
+        modifier            = Modifier.padding(horizontal = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         rows.forEach { row ->
             Row(
@@ -324,7 +380,7 @@ private fun LedgerTab(
         }
     }
 
-    // Transaction list (거래 내역이 있을 때만)
+    // Transaction list
     if (transactions.isNotEmpty()) {
         Spacer(Modifier.height(12.dp))
         Text(
@@ -347,37 +403,78 @@ private fun LedgerTab(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Box(
                         modifier         = Modifier.size(40.dp).background(catColor.copy(0.2f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) { Text(categoryEmojiForClassifier(tx.category), fontSize = 18.sp) }
                     Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(tx.store, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                        Text("${tx.category} · ${tx.date}",  style = MaterialTheme.typography.bodySmall,  color = Gray500)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            tx.store,
+                            style    = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        Text(
+                            "${tx.category} · ${tx.date}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Gray500
+                        )
                     }
                 }
-                Text(formatWon(tx.amount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    formatWon(tx.amount),
+                    style      = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier   = Modifier.padding(start = 8.dp)
+                )
             }
         }
     }
 }
 
-// ── Tab 2: 동향 변화 ───────────────────────────────────────────────────────────
+// ── Tab 2: 동향 변화 ─────────────────────────────────────────────────────────
+// [FIX #5] SampleData.monthly 제거 → 실제 집계 데이터(buildMonthlyData) 사용
+// [FIX #5] 하드코딩된 "2026년 월별 지출", 평균값, 텍스트 → 실제 계산값으로 교체
 
 @Composable
-private fun TrendsTab(monthlyData: List<com.example.personalfinance.data.MonthlyData>) {
+private fun TrendsTab(monthlyData: List<MonthlyData>) {
+    val now        = YearMonth.now()
+    val headerText = "${now.year}년 최근 월별 지출"
+    val avgAmount  = if (monthlyData.isEmpty()) 0
+                     else monthlyData.sumOf { it.amount } / monthlyData.size
+    val lastEntry  = monthlyData.lastOrNull()
+    val avgDiffText = when {
+        lastEntry == null || avgAmount == 0 -> "데이터가 부족해요"
+        else -> {
+            val diff = ((lastEntry.amount - avgAmount).toFloat() / avgAmount * 100).toInt()
+            if (diff >= 0) "${lastEntry.month}은 평균보다 ${diff}% 높아요"
+            else           "${lastEntry.month}은 평균보다 ${-diff}% 낮아요"
+        }
+    }
+
     Column(modifier = Modifier.padding(24.dp)) {
         Text(
-            "2026년 월별 지출",
+            headerText,
             style      = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color      = Gray600,
             modifier   = Modifier.padding(bottom = 16.dp)
         )
 
-        val maxAmount = monthlyData.maxOf { it.amount }.toFloat()
+        if (monthlyData.all { it.amount == 0 }) {
+            Box(
+                modifier         = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("지출 내역이 없어요", style = MaterialTheme.typography.bodyMedium, color = Gray400)
+            }
+            return
+        }
+
+        val maxAmount = monthlyData.maxOf { it.amount }.toFloat().coerceAtLeast(1f)
         Row(
             modifier              = Modifier.fillMaxWidth().height(200.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -412,14 +509,24 @@ private fun TrendsTab(monthlyData: List<com.example.personalfinance.data.Monthly
         ) {
             Column {
                 Text("월 평균 지출", style = MaterialTheme.typography.bodyMedium, color = Gray600)
-                Text("₩1,192,000", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
-                Text("4월은 평균보다 5% 높아요", style = MaterialTheme.typography.bodySmall, color = Gray500, modifier = Modifier.padding(top = 8.dp))
+                Text(
+                    formatWon(avgAmount),
+                    style      = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.padding(top = 4.dp)
+                )
+                Text(
+                    avgDiffText,
+                    style    = MaterialTheme.typography.bodySmall,
+                    color    = Gray500,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
         }
     }
 }
 
-// ── Tab 3: 예산 관리 ───────────────────────────────────────────────────────────
+// ── Tab 3: 예산 관리 ──────────────────────────────────────────────────────────
 
 @Composable
 private fun BudgetTab(
@@ -449,8 +556,8 @@ private fun BudgetTab(
                         checked         = budgetEnabled,
                         onCheckedChange = onToggle,
                         colors          = SwitchDefaults.colors(
-                            checkedThumbColor  = Color.White,
-                            checkedTrackColor  = Blue500
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Blue500
                         )
                     )
                 }
@@ -519,7 +626,6 @@ private fun BudgetTab(
 
         if (categories.isNotEmpty()) {
             Spacer(Modifier.height(24.dp))
-
             Text(
                 "카테고리별 예산",
                 style      = MaterialTheme.typography.bodySmall,

@@ -15,9 +15,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
+import com.example.personalfinance.data.ExpenseCategoryClassifier
+import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.data.categoryEmoji
 import com.example.personalfinance.ui.theme.*
 
@@ -30,13 +33,16 @@ private data class ExpenseCategory(
 @Composable
 fun NewRecordScreen(navController: NavController) {
     val categories = listOf(
-        ExpenseCategory("food",     "음식", CategoryFood),
-        ExpenseCategory("shopping", "쇼핑", CategoryShopping),
-        ExpenseCategory("game",     "게임", CategoryGame),
-        ExpenseCategory("culture",  "문화", CategoryCulture),
-        ExpenseCategory("beauty",   "뷰티", CategoryBeauty),
-        ExpenseCategory("other",    "기타", CategoryOther),
+        ExpenseCategory(ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE,         "식비/카페",   CategoryFood),
+        ExpenseCategory(ExpenseCategoryClassifier.CATEGORY_LIVING_MART,       "생활/마트",   CategoryShopping),
+        ExpenseCategory(ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE,   "쇼핑/온라인", CategoryGame),
+        ExpenseCategory(ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE,   "문화/여가",   CategoryCulture),
+        ExpenseCategory(ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION,"고정비/구독", CategoryBeauty),
+        ExpenseCategory(ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL,    "건강/의료",   CategoryOther),
     )
+
+    val context = LocalContext.current
+    val store   = remember { UserStatsStore.getInstance(context) }
 
     var amount           by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
@@ -213,7 +219,13 @@ fun NewRecordScreen(navController: NavController) {
                         else         Brush.horizontalGradient(listOf(Gray100, Gray100))
                     )
                     .clickable(enabled = canSave && !isSaving) {
+                        val parsedAmount = amount.replace(",", "").toLongOrNull() ?: return@clickable
                         isSaving = true
+                        store.addExpense(
+                            amount       = parsedAmount,
+                            category     = selectedCategory!!,
+                            merchantName = note.ifBlank { selectedCategory!! }
+                        )
                         navController.popBackStack()
                     },
                 contentAlignment = Alignment.Center
