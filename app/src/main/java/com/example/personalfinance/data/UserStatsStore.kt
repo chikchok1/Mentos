@@ -285,6 +285,45 @@ class UserStatsStore private constructor(context: Context) {
         return true
     }
 
+    fun updateTransactionCategory(transactionId: String, newCategory: String): Boolean {
+        val normalizedCategory = if (newCategory in ExpenseCategoryClassifier.categories) {
+            newCategory
+        } else {
+            ExpenseCategoryClassifier.CATEGORY_OTHER
+        }
+
+        val currentTransactions = _transactionsFlow.value
+        val index = currentTransactions.indexOfFirst { it.id == transactionId }
+        if (index == -1) return false
+
+        val oldTx = currentTransactions[index]
+        if (oldTx.category == normalizedCategory) return false
+
+        val newTx = oldTx.copy(category = normalizedCategory)
+        val newTransactions = currentTransactions.toMutableList()
+        newTransactions[index] = newTx
+
+        val current = _statsFlow.value
+        val thisMonth = YearMonth.now()
+        val thisMonthTxs = newTransactions.filter { tx ->
+            runCatching {
+                YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate())
+            }.getOrNull() == thisMonth
+        }
+        val newSpending = thisMonthTxs.sumOf { it.amount }
+        val newCategorySpending = ExpenseCategoryClassifier.categories
+            .associateWith { cat -> thisMonthTxs.filter { it.category == cat }.sumOf { it.amount } }
+
+        val newStats = current.copy(
+            thisMonthSpending = newSpending,
+            categorySpending = newCategorySpending,
+            transactions = newTransactions
+        )
+
+        saveStats(newStats, newTransactions)
+        return true
+    }
+
 
 
     private fun loadCategorySpending(): Map<String, Long> =
