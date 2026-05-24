@@ -119,14 +119,10 @@ class CardNotificationListenerService : NotificationListenerService() {
         }
         val serviceScope = this.serviceScope
         serviceScope.launch {
-            // 1차: 로컬 키워드 매칭
-            var category = ExpenseCategoryClassifier.classify(
-                merchantName = result.merchantName,
-                rawText = content.text
-            )
+            // 백엔드 AI 파싱 API 호출 (로컬 사전 제거)
+            var category = ExpenseCategoryClassifier.CATEGORY_OTHER
 
-            // 2차: 로컬 매칭이 '기타'일 경우 백엔드 AI 파싱 API 호출
-            if (category == ExpenseCategoryClassifier.CATEGORY_OTHER && result.merchantName.isNotBlank()) {
+            if (result.merchantName.isNotBlank()) {
                 try {
                     val tokenManager = TokenManager(this@CardNotificationListenerService)
                     val classificationApi = ApiClient.getClassificationApi(this@CardNotificationListenerService, tokenManager)
