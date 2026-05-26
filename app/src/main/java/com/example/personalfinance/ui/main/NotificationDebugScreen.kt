@@ -86,7 +86,7 @@ fun NotificationDebugScreen(navController: NavController) {
     var manualTitle by remember { mutableStateOf("신한카드") }
     var manualText by remember { mutableStateOf("스타벅스 5,000원 승인") }
     var manualAnalysis by remember { mutableStateOf<PaymentNotificationAnalysis?>(null) }
-    var reclassificationMessage by remember { mutableStateOf<String?>(null) }
+
 
     val postNotificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -200,17 +200,7 @@ fun NotificationDebugScreen(navController: NavController) {
                 }
             )
 
-            StoredTransactionMaintenancePanel(
-                message = reclassificationMessage,
-                onReclassify = {
-                    val count = userStatsStore.reclassifyOtherTransactions()
-                    reclassificationMessage = if (count > 0) {
-                        "${count}건의 기타 거래를 재분류했습니다."
-                    } else {
-                        "재분류된 기타 거래가 없습니다."
-                    }
-                }
-            )
+
 
             LatestResultPanel(latestResult)
 
@@ -318,30 +308,7 @@ private fun ManualNotificationTestPanel(
     }
 }
 
-@Composable
-private fun StoredTransactionMaintenancePanel(
-    message: String?,
-    onReclassify: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Gray200, RoundedCornerShape(8.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("저장된 거래 관리", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Button(
-            onClick = onReclassify,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("기존 기타 거래 재분류")
-        }
-        message?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = Gray700)
-        }
-    }
-}
+
 
 @Composable
 private fun ManualAnalysisResultPanel(analysis: PaymentNotificationAnalysis?) {

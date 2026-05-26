@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
 import com.example.personalfinance.data.*
 import com.example.personalfinance.ui.theme.*
+import kotlinx.coroutines.launch
 
 // ── 카테고리 이름 매핑 (ExpenseCategoryClassifier → 화면 표시용) ───────────────────
 
@@ -108,6 +109,7 @@ private fun buildCategoriesFromStats(
 
 // ── LedgerScreen ──────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LedgerScreen(navController: NavController) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -119,6 +121,11 @@ fun LedgerScreen(navController: NavController) {
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var budgetEnabled    by remember { mutableStateOf(true) }
     var currentMonth     by remember { mutableStateOf(YearMonth.now()) }
+
+    var showCategoryEditSheet by remember { mutableStateOf(false) }
+    var selectedTransactionForEdit by remember { mutableStateOf<Transaction?>(null) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
 
     // ── currentMonth 기준으로 거래 필터링 ────────────────────────────────────
     val transactions = storedTransactions.filter {
@@ -219,6 +226,10 @@ fun LedgerScreen(navController: NavController) {
                     currentMonth     = currentMonth,
                     onCategoryClick  = { cat ->
                         selectedCategory = if (selectedCategory == cat) null else cat
+                    },
+                    onTransactionClick = { tx ->
+                        selectedTransactionForEdit = tx
+                        showCategoryEditSheet = true
                     }
                 )
                 1 -> TrendsTab(monthlyData)
@@ -226,6 +237,88 @@ fun LedgerScreen(navController: NavController) {
                     budgetEnabled, { budgetEnabled = it },
                     monthlyBudget, budgetUsedPercentage, remainingBudget, categories
                 )
+            }
+        }
+    }
+
+    // ── Category Edit Bottom Sheet ───────────────────────────────────────────
+    if (showCategoryEditSheet && selectedTransactionForEdit != null) {
+        ModalBottomSheet(
+            onDismissRequest = { showCategoryEditSheet = false },
+            sheetState = sheetState,
+            containerColor = Color.White,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .padding(bottom = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "카테고리 수정",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Gray600
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "${selectedTransactionForEdit?.store}의 카테고리를 선택하세요",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Gray500
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                val availableCategories = ExpenseCategoryClassifier.categories
+                val rows = availableCategories.chunked(3)
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    rows.forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            row.forEach { cat ->
+                                val isSelected = cat == selectedTransactionForEdit?.category
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(if (isSelected) Blue50 else Gray50)
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) Blue400 else Gray100,
+                                            shape = RoundedCornerShape(16.dp)
+                                        )
+                                        .clickable {
+                                            selectedTransactionForEdit?.let { tx ->
+                                                store.updateTransactionCategory(tx.id, cat)
+                                            }
+                                            scope.launch { sheetState.hide() }.invokeOnCompletion {
+                                                if (!sheetState.isVisible) {
+                                                    showCategoryEditSheet = false
+                                                }
+                                            }
+                                        }
+                                        .padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(categoryEmojiForClassifier(cat), fontSize = 28.sp)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = cat,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) Blue500 else Gray600
+                                        )
+                                    }
+                                }
+                            }
+                            repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
+                        }
+                    }
+                }
             }
         }
     }
@@ -240,7 +333,8 @@ private fun LedgerTab(
     selectedCategory: String?,
     totalSpending: Int,
     currentMonth: YearMonth,
-    onCategoryClick: (String) -> Unit
+    onCategoryClick: (String) -> Unit,
+    onTransactionClick: (Transaction) -> Unit
 ) {
     // 데이터가 없을 때 안내 화면
     if (categories.isEmpty()) {
@@ -399,6 +493,7 @@ private fun LedgerTab(
                     .clip(RoundedCornerShape(16.dp))
                     .border(1.dp, Gray100, RoundedCornerShape(16.dp))
                     .background(Color.White)
+                    .clickable { onTransactionClick(tx) }
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically

@@ -285,30 +285,46 @@ class UserStatsStore private constructor(context: Context) {
         return true
     }
 
-    fun reclassifyOtherTransactions(): Int {
-        val current = _statsFlow.value
-        val currentTransactions = _transactionsFlow.value
-        val result = StoredTransactionReclassifier.reclassifyOtherApprovedTransactions(currentTransactions)
-
-        if (result.reclassifiedCount == 0) {
-            return 0
+    fun updateTransactionCategory(transactionId: String, newCategory: String): Boolean {
+        val normalizedCategory = if (newCategory in ExpenseCategoryClassifier.categories) {
+            newCategory
+        } else {
+            ExpenseCategoryClassifier.CATEGORY_OTHER
         }
 
+        val currentTransactions = _transactionsFlow.value
+        val index = currentTransactions.indexOfFirst { it.id == transactionId }
+        if (index == -1) return false
+
+        val oldTx = currentTransactions[index]
+        if (oldTx.category == normalizedCategory) return false
+
+        val newTx = oldTx.copy(category = normalizedCategory)
+        val newTransactions = currentTransactions.toMutableList()
+        newTransactions[index] = newTx
+
+        val current = _statsFlow.value
         val thisMonth = YearMonth.now()
-        val thisMonthTxs = result.transactions.filter { tx ->
+        val thisMonthTxs = newTransactions.filter { tx ->
             runCatching {
                 YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate())
             }.getOrNull() == thisMonth
         }
+        val newSpending = thisMonthTxs.sumOf { it.amount }
+        val newCategorySpending = ExpenseCategoryClassifier.categories
+            .associateWith { cat -> thisMonthTxs.filter { it.category == cat }.sumOf { it.amount } }
+
         val newStats = current.copy(
-            thisMonthSpending = thisMonthTxs.sumOf { it.amount },
-            categorySpending = StoredTransactionReclassifier.calculateCategorySpending(thisMonthTxs),
-            transactions = result.transactions
+            thisMonthSpending = newSpending,
+            categorySpending = newCategorySpending,
+            transactions = newTransactions
         )
 
-        saveStats(newStats, result.transactions)
-        return result.reclassifiedCount
+        saveStats(newStats, newTransactions)
+        return true
     }
+
+
 
     private fun loadCategorySpending(): Map<String, Long> =
         ExpenseCategoryClassifier.categories.associateWith { category ->
@@ -375,57 +391,7 @@ internal object TransactionPersistencePolicy {
         status == TransactionStatus.APPROVED_RECORDED
 }
 
-internal object StoredTransactionReclassifier {
-    data class Result(
-        val transactions: List<Transaction>,
-        val reclassifiedCount: Int
-    )
 
-    fun reclassifyOtherApprovedTransactions(transactions: List<Transaction>): Result {
-        var changedCount = 0
-        val reclassified = transactions.map { transaction ->
-            if (!transaction.isReclassificationCandidate()) {
-                return@map transaction
-            }
-
-            val newCategory = ExpenseCategoryClassifier.classify(
-                merchantName = transaction.store,
-                rawText = ""
-            )
-
-            if (newCategory == ExpenseCategoryClassifier.CATEGORY_OTHER) {
-                transaction
-            } else {
-                changedCount += 1
-                transaction.copy(category = newCategory)
-            }
-        }
-
-        return Result(
-            transactions = reclassified,
-            reclassifiedCount = changedCount
-        )
-    }
-
-    fun calculateCategorySpending(transactions: List<Transaction>): Map<String, Long> {
-        val spending = ExpenseCategoryClassifier.categories.associateWith { 0L }.toMutableMap()
-        transactions
-            .filter { it.status == TransactionStatus.APPROVED_RECORDED }
-            .forEach { transaction ->
-                val category = if (transaction.category in ExpenseCategoryClassifier.categories) {
-                    transaction.category
-                } else {
-                    ExpenseCategoryClassifier.CATEGORY_OTHER
-                }
-                spending[category] = (spending[category] ?: 0L) + transaction.amount
-            }
-        return spending
-    }
-
-    private fun Transaction.isReclassificationCandidate(): Boolean =
-        status == TransactionStatus.APPROVED_RECORDED &&
-            category == ExpenseCategoryClassifier.CATEGORY_OTHER
-}
 
 internal object TransactionHistory {
     private const val MAX_TRANSACTIONS = 200
