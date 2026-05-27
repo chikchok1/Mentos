@@ -5,7 +5,7 @@ import java.time.LocalDateTime
 
 @Entity
 @Table(name = "users")
-data class User(
+class User(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0,
@@ -23,5 +23,19 @@ data class User(
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
     @Column(nullable = true)
-    var lastAttendanceDate: java.time.LocalDate? = null
-)
+    var lastAttendanceDate: java.time.LocalDate? = null,
+
+    @Column(nullable = false)
+    var coins: Int = 0,
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_owned_items", joinColumns = [JoinColumn(name = "user_id")])
+    @Column(name = "item_id")
+    var ownedItems: MutableSet<String> = mutableSetOf()
+) {
+    // JPA 필수 no-arg 생성자
+    protected constructor() : this(
+        socialId  = "",
+        provider  = "",
+    )
+}
