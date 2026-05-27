@@ -10,4 +10,7 @@ interface GachaApi {
 
     @POST("api/gacha/attendance")
     suspend fun performAttendanceGacha(): Response<Map<String, Any>>
+
+    @GET("api/gacha/user-state")
+    suspend fun getUserGachaState(): Response<Map<String, Any>>
 }

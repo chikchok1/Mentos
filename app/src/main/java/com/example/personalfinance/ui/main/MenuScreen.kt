@@ -111,7 +111,8 @@ fun MenuScreen(
                         .background(Gray50)
                         .clickable {
                             when (item.id) {
-                                "gacha" -> navController.navigate(com.example.personalfinance.navigation.Screen.Gacha.route)
+                                "gacha"     -> navController.navigate(com.example.personalfinance.navigation.Screen.Gacha.route)
+                                "inventory" -> navController.navigate(com.example.personalfinance.navigation.Screen.Inventory.route)
                             }
                         }
                         .padding(16.dp),

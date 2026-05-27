@@ -2,7 +2,9 @@ package com.example.personalfinance.ui.main
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -11,22 +13,35 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
-import com.example.personalfinance.data.GachaStore
-import com.example.personalfinance.data.TokenManager
+import com.example.personalfinance.data.*
 import com.example.personalfinance.network.ApiClient
 import com.example.personalfinance.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.PI
 
 // ── 캡슐머신 카드 데이터 ──────────────────────────────────────────────────────────
 
@@ -43,39 +58,40 @@ private data class CapsuleMachineData(
 
 @Composable
 fun GachaScreen(navController: NavController) {
-    val context    = LocalContext.current
-    val gachaStore = remember { GachaStore(context) }
-    val tokenManager = remember { TokenManager(context) }
-    val gachaApi = remember { ApiClient.getGachaApi(context, tokenManager) }
+    val context        = LocalContext.current
+    val gachaStore     = remember { GachaStore(context) }
     val coroutineScope = rememberCoroutineScope()
+    val tokenManager   = remember { TokenManager(context) }
+    val gachaApi       = remember { ApiClient.getGachaApi(context, tokenManager) }
 
-    // ── 출석 가챠 상태 (서버 연동) ────────────────────────────────────────────────────────
-    var attendanceUsed by remember { mutableStateOf(false) }
-    // 1초마다 갱신되는 카운트다운 문자열 (UI용 로컬 계산)
-    var countdownText  by remember { mutableStateOf(gachaStore.timeUntilMidnight()) }
+    // ── 상태 ──────────────────────────────────────────────────────────────────
+    var attendanceUsed   by remember { mutableStateOf(false) }
+    var countdownText    by remember { mutableStateOf(gachaStore.timeUntilMidnight()) }
+    var coins            by remember { mutableStateOf(0) }
+    var gachaResult      by remember { mutableStateOf<GachaResult?>(null) }
+    var showResultDialog by remember { mutableStateOf(false) }
 
     // 서버 상태 조회 및 타이머 루프
     LaunchedEffect(Unit) {
-        // 백엔드에서 출석 여부 조회
         try {
-            val response = gachaApi.getAttendanceStatus()
-            if (response.isSuccessful) {
-                attendanceUsed = response.body()?.get("usedToday") ?: false
+            val statusRes = gachaApi.getAttendanceStatus()
+            if (statusRes.isSuccessful) {
+                attendanceUsed = statusRes.body()?.get("usedToday") ?: false
+            }
+            val stateRes = gachaApi.getUserGachaState()
+            if (stateRes.isSuccessful) {
+                coins = (stateRes.body()?.get("coins") as? Number)?.toInt() ?: 0
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-
-        // 카운트다운 타이머 갱신
         while (true) {
             delay(1_000)
             countdownText = gachaStore.timeUntilMidnight()
         }
     }
 
-    // ── 다른 가챠 상태 (추후 서버 연동 예정) ─────────────────────────────────
     var adWatched by remember { mutableStateOf(false) }
-    var coins     by remember { mutableStateOf(25) }
 
     val machines = listOf(
         CapsuleMachineData(
@@ -125,7 +141,27 @@ fun GachaScreen(navController: NavController) {
                 style      = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
-            Spacer(Modifier.width(48.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFFFFF8E1))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(
+                    imageVector        = Icons.Rounded.MonetizationOn,
+                    contentDescription = null,
+                    tint               = Color(0xFFFFB800),
+                    modifier           = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text       = "$coins",
+                    style      = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color      = Color(0xFFE65100)
+                )
+            }
         }
         HorizontalDivider(color = Gray100)
 
@@ -138,7 +174,6 @@ fun GachaScreen(navController: NavController) {
         ) {
             Spacer(Modifier.height(24.dp))
 
-            // 타이틀 영역
             Column(modifier = Modifier.padding(bottom = 24.dp)) {
                 Text(
                     text       = "캡슐을 뽑으면\n다양한 보상을 받을 수 있어요",
@@ -155,7 +190,9 @@ fun GachaScreen(navController: NavController) {
                 )
             }
 
-            // 카드 목록
+            GachaProbabilityRow()
+            Spacer(Modifier.height(20.dp))
+
             machines.forEach { machine ->
                 val available = when (machine.id) {
                     "attendance" -> !attendanceUsed
@@ -169,12 +206,7 @@ fun GachaScreen(navController: NavController) {
                     "coin"       -> "${coins}개 보유"
                     else         -> ""
                 }
-                // 출석 가챠가 사용된 경우에만 카운트다운 표시
-                val cooldownText = if (machine.id == "attendance" && attendanceUsed) {
-                    countdownText
-                } else {
-                    null
-                }
+                val cooldownText = if (machine.id == "attendance" && attendanceUsed) countdownText else null
 
                 CapsuleMachineCard(
                     data         = machine,
@@ -188,35 +220,659 @@ fun GachaScreen(navController: NavController) {
                                     try {
                                         val response = gachaApi.performAttendanceGacha()
                                         if (response.isSuccessful) {
-                                            attendanceUsed = true
-                                            android.widget.Toast.makeText(context, "출석 보상을 받았습니다!", android.widget.Toast.LENGTH_SHORT).show()
+                                            val body       = response.body()
+                                            val itemId     = body?.get("itemId") as? String
+                                            val isDup      = body?.get("isDuplicate") as? Boolean ?: false
+                                            val coinRew    = (body?.get("coinReward") as? Number)?.toInt() ?: 0
+                                            val totalCoins = (body?.get("totalCoins") as? Number)?.toInt() ?: 0
+                                            if (itemId != null) {
+                                                val item = GachaItemPool.findById(itemId)
+                                                if (item != null) {
+                                                    gachaResult = if (isDup)
+                                                        GachaResult.DuplicateCoin(item, coinRew)
+                                                    else
+                                                        GachaResult.NewItem(item)
+                                                    coins          = totalCoins
+                                                    attendanceUsed = true
+                                                    showResultDialog = true
+                                                }
+                                            }
                                         } else {
-                                            android.widget.Toast.makeText(context, "이미 처리되었거나 오류가 발생했습니다.", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, "오류가 발생했습니다.", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                     } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "네트워크 오류가 발생했습니다.", android.widget.Toast.LENGTH_SHORT).show()
+                                        android.widget.Toast.makeText(context, "네트워크 오류", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
                             "ad"   -> adWatched = true
-                            "coin" -> if (coins >= 10) coins -= 10
+                            "coin" -> { /* TODO: 코인 뽑기 API 연동 */ }
                         }
                     },
                 )
                 Spacer(Modifier.height(12.dp))
             }
 
-            // 하단 안내
             Box(
-                modifier         = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
+                modifier         = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text  = "보상은 랜덤으로 지급됩니다",
                     style = MaterialTheme.typography.bodySmall,
                     color = Gray400,
+                )
+            }
+        }
+    }
+
+    // ── 가챠 결과 연출 ────────────────────────────────────────────────────────
+    if (showResultDialog && gachaResult != null) {
+        CinematicGachaReveal(
+            result    = gachaResult!!,
+            onDismiss = { showResultDialog = false }
+        )
+    }
+}
+
+// ── 확률 안내 행 ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun GachaProbabilityRow() {
+    val grades = listOf(
+        Triple("Common",    "70%", Color(0xFF9E9E9E)),
+        Triple("Rare",      "15%", Color(0xFF1976D2)),
+        Triple("Unique",     "4%", Color(0xFF7B1FA2)),
+        Triple("Legendary",  "1%", Color(0xFFE65100)),
+    )
+    Row(
+        modifier              = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFFF8F9FA))
+            .padding(vertical = 12.dp, horizontal = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        grades.forEach { (name, pct, color) ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(text = name, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.SemiBold)
+                Text(text = pct,  style = MaterialTheme.typography.labelSmall, color = Gray500)
+            }
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Cinematic Gacha Reveal
+// ══════════════════════════════════════════════════════════════════════════════
+
+private enum class RevealPhase { ENTERING, FLOATING, TAPPING, OPENING, REVEALED }
+
+private data class RevealParticle(
+    val angle: Float,
+    val speed: Float,
+    val size:  Float,
+    val color: Color,
+)
+
+// 등급별 캡슐 색상
+private fun gradeAccentColor(grade: GachaGrade): Color = when (grade) {
+    GachaGrade.COMMON    -> Color(0xFF9E9E9E)
+    GachaGrade.RARE      -> Color(0xFF1565C0)
+    GachaGrade.UNIQUE    -> Color(0xFF6A1B9A)
+    GachaGrade.LEGENDARY -> Color(0xFFE65100)
+}
+
+private fun gradeLidColor(grade: GachaGrade): Color = when (grade) {
+    GachaGrade.COMMON    -> Color(0xFFE0E0E0)
+    GachaGrade.RARE      -> Color(0xFF64B5F6)
+    GachaGrade.UNIQUE    -> Color(0xFFCE93D8)
+    GachaGrade.LEGENDARY -> Color(0xFFFFD54F)
+}
+
+private fun gradeParticleCount(grade: GachaGrade): Int = when (grade) {
+    GachaGrade.COMMON    -> 10
+    GachaGrade.RARE      -> 18
+    GachaGrade.UNIQUE    -> 28
+    GachaGrade.LEGENDARY -> 50
+}
+
+private fun buildRevealParticles(grade: GachaGrade, accent: Color, lid: Color): List<RevealParticle> {
+    val count  = gradeParticleCount(grade)
+    val colors = listOf(accent, lid, Color.White, accent.copy(alpha = 0.7f))
+    return List(count) { i ->
+        RevealParticle(
+            angle = (i.toFloat() / count) * 2f * PI.toFloat() + ((i * 7919L) % 628L) * 0.01f,
+            speed = 110f + ((i * 3571L) % 130L),
+            size  = 4.5f + ((i * 2017L) % 9L),
+            color = colors[i % colors.size],
+        )
+    }
+}
+
+@Composable
+private fun CinematicGachaReveal(
+    result:    GachaResult,
+    onDismiss: () -> Unit,
+) {
+    val item        = when (result) {
+        is GachaResult.NewItem       -> result.item
+        is GachaResult.DuplicateCoin -> result.item
+    }
+    val isDuplicate = result is GachaResult.DuplicateCoin
+    val coinReward  = if (result is GachaResult.DuplicateCoin) result.coins else 0
+
+    val accent    = gradeAccentColor(item.grade)
+    val lidColor  = gradeLidColor(item.grade)
+    val hasRays   = item.grade == GachaGrade.LEGENDARY
+    val particles = remember { buildRevealParticles(item.grade, accent, lidColor) }
+
+    var phase     by remember { mutableStateOf(RevealPhase.ENTERING) }
+    val haptic    = LocalHapticFeedback.current
+    val scope     = rememberCoroutineScope()
+
+    // ── Enter → Float ─────────────────────────────────────────────────────────
+    LaunchedEffect(Unit) {
+        delay(80)
+        phase = RevealPhase.FLOATING
+    }
+
+    val enterScale by animateFloatAsState(
+        targetValue   = if (phase == RevealPhase.ENTERING) 0f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label         = "enter",
+    )
+
+    // ── 무한 반복 애니메이션 ──────────────────────────────────────────────────
+    val loop = rememberInfiniteTransition(label = "loop")
+
+    val swayX by loop.animateFloat(
+        initialValue  = -7f, targetValue = 7f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "swayX",
+    )
+    val swayY by loop.animateFloat(
+        initialValue  = 0f, targetValue = -9f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "swayY",
+    )
+    val glowPulse by loop.animateFloat(
+        initialValue  = 0.45f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "glow",
+    )
+    val tapPulse by loop.animateFloat(
+        initialValue  = 0.35f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(850, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "tapPulse",
+    )
+    val rayRotation by loop.animateFloat(
+        initialValue  = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(10000, easing = LinearEasing)),
+        label = "ray",
+    )
+
+    // ── 탭 플래시 ─────────────────────────────────────────────────────────────
+    var flashActive by remember { mutableStateOf(false) }
+    val flashAlpha by animateFloatAsState(
+        targetValue      = if (flashActive) 0.88f else 0f,
+        animationSpec    = tween(if (flashActive) 50 else 400),
+        finishedListener = { v -> if (v > 0f) flashActive = false },
+        label            = "flash",
+    )
+
+    // ── 뚜껑 열림 (0 → -1 정규화, Canvas 내에서 관리) ────────────────────
+    // lidProgress 0=닫혀있음  1=완전히 열림
+    val lidProgress by animateFloatAsState(
+        targetValue = when (phase) {
+            RevealPhase.OPENING, RevealPhase.REVEALED -> 1f
+            else -> 0f
+        },
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "lid",
+    )
+
+    // ── 아이템 등장 ───────────────────────────────────────────────────────────
+    val itemAlpha by animateFloatAsState(
+        targetValue   = if (phase == RevealPhase.REVEALED) 1f else 0f,
+        animationSpec = tween(550, easing = FastOutSlowInEasing),
+        label         = "itemAlpha",
+    )
+    val itemScale by animateFloatAsState(
+        targetValue   = if (phase == RevealPhase.REVEALED) 1f else 0.1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label         = "itemScale",
+    )
+
+    // ── 파티클 진행도 ─────────────────────────────────────────────────────────
+    var particleProgress by remember { mutableStateOf(0f) }
+    LaunchedEffect(phase) {
+        if (phase == RevealPhase.OPENING) {
+            val start = System.currentTimeMillis()
+            while (particleProgress < 1f) {
+                particleProgress = ((System.currentTimeMillis() - start).toFloat() / 1400f).coerceIn(0f, 1f)
+                delay(16L)
+            }
+        }
+    }
+
+    // ── OPENING → REVEALED ────────────────────────────────────────────────────
+    LaunchedEffect(phase) {
+        if (phase == RevealPhase.OPENING) {
+            delay(800)
+            phase = RevealPhase.REVEALED
+        }
+    }
+
+    val isFloating = phase == RevealPhase.FLOATING || phase == RevealPhase.TAPPING
+
+    Dialog(
+        onDismissRequest = { if (phase == RevealPhase.REVEALED) onDismiss() },
+        properties       = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false),
+    ) {
+        Box(
+            modifier         = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+
+            // ── 배경 ─────────────────────────────────────────────────────────
+            Box(Modifier.fillMaxSize().background(Color(0xFF06060F).copy(alpha = 0.96f)))
+
+            // ── 글로우 링 + 광선 효과 (풀스크린 Canvas – 잘림 없는 완전한 원) ─────
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationZ = if (hasRays && phase != RevealPhase.ENTERING) rayRotation else 0f
+                        alpha     = enterScale
+                    },
+            ) {
+                val cx  = size.width  / 2f
+                val cy  = size.height / 2f
+                val len = maxOf(size.width, size.height) * 1.4f
+
+                // 글로우 링 (항상)
+                val ringCount = if (hasRays) 5 else 3
+                val baseRadius = minOf(size.width, size.height) * 0.22f
+                repeat(ringCount) { i ->
+                    val ratio = (i + 1f) / ringCount
+                    drawCircle(
+                        color  = accent.copy(alpha = 0.10f * glowPulse * (1f - ratio * 0.45f)),
+                        radius = baseRadius * (1f + ratio * 1.2f) * glowPulse,
+                        center = Offset(cx, cy),
+                    )
+                }
+
+                // 광선 (Legendary)
+                if (hasRays && phase != RevealPhase.ENTERING) {
+                    repeat(12) { i ->
+                        val a = (i * (PI / 6.0)).toFloat()
+                        drawLine(
+                            color       = accent.copy(alpha = 0.11f * glowPulse),
+                            start       = Offset(cx, cy),
+                            end         = Offset(cx + cos(a) * len, cy + sin(a) * len),
+                            strokeWidth = 80f,
+                        )
+                    }
+                }
+            }
+
+            // ── 등급 뱃지 ─────────────────────────────────────────────────────
+            if (phase != RevealPhase.ENTERING) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 72.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(accent.copy(alpha = 0.12f))
+                        .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
+                        .padding(horizontal = 24.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        text       = "✦  ${item.grade.displayName}  ✦",
+                        color      = lidColor,
+                        style      = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            // ── 캡슐 ─────────────────────────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .size(260.dp)
+                    .offset(y = (-20).dp)
+                    .pointerInput(phase) {
+                        if (phase == RevealPhase.FLOATING) {
+                            detectTapGestures {
+                                scope.launch {
+                                    phase       = RevealPhase.TAPPING
+                                    flashActive = true
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    delay(150)
+                                    phase = RevealPhase.OPENING
+                                }
+                            }
+                        }
+                    }
+                    .graphicsLayer {
+                        scaleX       = enterScale
+                        scaleY       = enterScale
+                        alpha        = enterScale
+                        translationX = if (isFloating) swayX * density else 0f
+                        translationY = if (isFloating) swayY * density else 0f
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                // ── 캡슐 Canvas ──────────────────────────────────────────────────
+                // 260dp 정사각형, 중심 (cx,cy), 반지름 cr 의 완전한 정원
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val cx = size.width  / 2f
+                    val cy = size.height / 2f
+                    // 정원을 보장하려면 width==height 이므로 한쪽만 쓰면 됨
+                    val cr = size.width * 0.42f
+
+                    // ──────────────────────────────────────────────────
+                    // 파티클
+                    // ──────────────────────────────────────────────────
+                    if (particleProgress > 0f) {
+                        particles.forEach { p ->
+                            val dist   = p.speed * particleProgress
+                            val px     = cx + cos(p.angle) * dist
+                            val py     = cy + sin(p.angle) * dist
+                            val pAlpha = (1f - particleProgress * 0.85f).coerceIn(0f, 1f)
+                            drawCircle(
+                                color  = p.color.copy(alpha = pAlpha),
+                                radius = p.size * (1f - particleProgress * 0.3f),
+                                center = Offset(px, py),
+                            )
+                        }
+                    }
+
+                    // ──────────────────────────────────────────────────
+                    // Body (하반구) – cy 고정
+                    // ──────────────────────────────────────────────────
+                    clipRect(left = cx - cr, top = cy, right = cx + cr, bottom = cy + cr) {
+                        // 1) 베이스 색상
+                        drawCircle(color = accent, radius = cr, center = Offset(cx, cy))
+
+                        // 2) 측면 어둠 (구체 느낌 핵심: 가장자리를 어둡게)
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.45f),
+                                ),
+                                center = Offset(cx, cy),
+                                radius = cr,
+                            ),
+                            radius = cr,
+                            center = Offset(cx, cy),
+                        )
+
+                        // 3) 하단 그림자 (광원 위)
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.28f),
+                                ),
+                                center = Offset(cx, cy + cr * 0.55f),
+                                radius = cr * 0.85f,
+                            ),
+                            radius = cr,
+                            center = Offset(cx, cy),
+                        )
+
+                        // 4) 림 라이트 (뒤에서 오는 빛 – 구체 현실감)
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colorStops = arrayOf(
+                                    0.00f to Color.Transparent,
+                                    0.65f to Color.Transparent,
+                                    0.85f to accent.copy(alpha = 0.50f),
+                                    1.00f to Color.White.copy(alpha = 0.18f),
+                                ),
+                                center = Offset(cx, cy),
+                                radius = cr,
+                            ),
+                            radius = cr,
+                            center = Offset(cx, cy),
+                        )
+                    }
+
+                    // ──────────────────────────────────────────────────
+                    // Lid (상반구) – lidProgress 0→1 로 위로 이동
+                    // ──────────────────────────────────────────────────
+                    val lidCy = cy - lidProgress * (size.height + cr)
+
+                    clipRect(left = cx - cr, top = lidCy - cr, right = cx + cr, bottom = lidCy) {
+                        // 1) 베이스 색상
+                        drawCircle(color = lidColor, radius = cr, center = Offset(cx, lidCy))
+
+                        // 2) 측면 어둠
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.38f),
+                                ),
+                                center = Offset(cx, lidCy),
+                                radius = cr,
+                            ),
+                            radius = cr,
+                            center = Offset(cx, lidCy),
+                        )
+
+                        // 3) 주 하이라이트 – 왼쪽 위 (광원이 좌상단)
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.75f),
+                                    Color.White.copy(alpha = 0.25f),
+                                    Color.Transparent,
+                                ),
+                                center = Offset(cx - cr * 0.28f, lidCy - cr * 0.42f),
+                                radius = cr * 0.55f,
+                            ),
+                            radius = cr,
+                            center = Offset(cx, lidCy),
+                        )
+
+                        // 4) 유리 굴절 – 하단 내부 밝은 반사
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.18f),
+                                    Color.Transparent,
+                                ),
+                                center = Offset(cx + cr * 0.15f, lidCy - cr * 0.05f),
+                                radius = cr * 0.45f,
+                            ),
+                            radius = cr,
+                            center = Offset(cx, lidCy),
+                        )
+                    }
+
+                    // 작은 스페큘러 하이라이트 (광원 반짝이)
+                    val shineCy = lidCy - cr * 0.44f
+                    if (shineCy > cy - cr - 20f) {
+                        // 큰 글로우
+                        drawCircle(
+                            color  = Color.White.copy(alpha = 0.35f),
+                            radius = cr * 0.10f,
+                            center = Offset(cx - cr * 0.28f, shineCy),
+                        )
+                        // 작은 하이라이트 점
+                        drawCircle(
+                            color  = Color.White.copy(alpha = 0.90f),
+                            radius = cr * 0.045f,
+                            center = Offset(cx - cr * 0.28f, shineCy),
+                        )
+                    }
+
+                    // ──────────────────────────────────────────────────
+                    // 이음선 (seam) – 타원 호로 3D 구형처럼
+                    // ──────────────────────────────────────────────────
+                    val seamAlpha = (1f - lidProgress * 2.8f).coerceIn(0f, 1f)
+                    if (seamAlpha > 0.01f) {
+                        // 타원 이음선: 폭=cr*2, 높이=cr*0.22 (구면 투시)
+                        val seamW = cr * 2f
+                        val seamH = cr * 0.22f
+
+                        // 그림자 호 (살짝 아래)
+                        drawOval(
+                            color   = Color.Black.copy(alpha = seamAlpha * 0.40f),
+                            topLeft = Offset(cx - seamW / 2f, cy - seamH / 2f + 3f),
+                            size    = Size(seamW, seamH),
+                            style   = Stroke(width = 4f),
+                        )
+                        // 하이라이트 호
+                        drawOval(
+                            color   = Color.White.copy(alpha = seamAlpha * 0.85f),
+                            topLeft = Offset(cx - seamW / 2f, cy - seamH / 2f),
+                            size    = Size(seamW, seamH),
+                            style   = Stroke(width = 2.5f),
+                        )
+                        // 음영 호 (아래쪽 반)
+                        drawOval(
+                            color   = Color.Black.copy(alpha = seamAlpha * 0.25f),
+                            topLeft = Offset(cx - seamW / 2f, cy - seamH / 2f + 2f),
+                            size    = Size(seamW, seamH),
+                            style   = Stroke(width = 2f),
+                        )
+                    }
+                }
+
+                // ── 아이템 이미지 (OPENING 이후 등장) ────────────────────────
+                if (phase == RevealPhase.OPENING || phase == RevealPhase.REVEALED) {
+                    Box(
+                        modifier = Modifier
+                            .offset(y = (-14).dp)
+                            .size(76.dp)
+                            .graphicsLayer {
+                                scaleX = itemScale
+                                scaleY = itemScale
+                                alpha  = itemAlpha
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Image(
+                            painter            = painterResource(id = item.drawableResId),
+                            contentDescription = item.name,
+                            modifier           = Modifier.size(68.dp),
+                        )
+                    }
+                }
+            }
+
+            // ── 탭 힌트 ──────────────────────────────────────────────────────
+            if (phase == RevealPhase.FLOATING) {
+                Column(
+                    modifier            = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 130.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text       = "탭해서 열기",
+                        style      = MaterialTheme.typography.bodyMedium,
+                        color      = Color.White.copy(alpha = tapPulse),
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = tapPulse * 0.55f))
+                    )
+                }
+            }
+
+            // ── 결과 정보 + 확인 버튼 ─────────────────────────────────────────
+            if (phase == RevealPhase.REVEALED) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 32.dp, vertical = 52.dp)
+                        .graphicsLayer { alpha = itemAlpha },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text       = item.name,
+                        style      = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color      = Color.White,
+                        textAlign  = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    if (isDuplicate) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .border(1.dp, Color(0xFFFFB800).copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Rounded.MonetizationOn,
+                                contentDescription = null,
+                                tint               = Color(0xFFFFB800),
+                                modifier           = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text       = "중복 아이템  +$coinReward 코인",
+                                style      = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color      = Color(0xFFFFB800),
+                            )
+                        }
+                    } else {
+                        Text(
+                            text       = "새 아이템 획득!",
+                            style      = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = lidColor,
+                        )
+                    }
+                    Spacer(Modifier.height(28.dp))
+                    Button(
+                        onClick   = onDismiss,
+                        modifier  = Modifier.fillMaxWidth().height(54.dp),
+                        shape     = RoundedCornerShape(18.dp),
+                        colors    = ButtonDefaults.buttonColors(
+                            containerColor = accent,
+                            contentColor   = Color.White,
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(0.dp),
+                    ) {
+                        Text(
+                            text       = "확인",
+                            style      = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+
+            // ── 플래시 오버레이 ───────────────────────────────────────────────
+            if (flashAlpha > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.White.copy(alpha = flashAlpha))
                 )
             }
         }
@@ -230,7 +886,7 @@ private fun CapsuleMachineCard(
     data: CapsuleMachineData,
     available: Boolean,
     statusLabel: String,
-    cooldownText: String?,       // null이면 카운트다운 미표시
+    cooldownText: String?,
     onAction: () -> Unit,
 ) {
     var pressed by remember { mutableStateOf(false) }
@@ -279,7 +935,6 @@ private fun CapsuleMachineCard(
             Column(modifier = Modifier.padding(24.dp)) {
 
                 Row(verticalAlignment = Alignment.Top) {
-                    // 아이콘 박스
                     Box(
                         modifier         = Modifier
                             .size(56.dp)
@@ -298,7 +953,6 @@ private fun CapsuleMachineCard(
 
                     Spacer(Modifier.width(16.dp))
 
-                    // 텍스트
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text       = data.title,
@@ -319,12 +973,10 @@ private fun CapsuleMachineCard(
 
                 Spacer(Modifier.height(20.dp))
 
-                // ── 버튼 + 상태 뱃지 ──────────────────────────────────────────
                 Row(
                     modifier          = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // 뽑기 버튼
                     Button(
                         onClick  = {
                             if (available) {
@@ -356,7 +1008,6 @@ private fun CapsuleMachineCard(
 
                     Spacer(Modifier.width(12.dp))
 
-                    // 상태 뱃지
                     Box(
                         modifier         = Modifier
                             .clip(RoundedCornerShape(10.dp))
@@ -375,16 +1026,15 @@ private fun CapsuleMachineCard(
                     }
                 }
 
-                // ── 카운트다운 표시 (출석 가챠 사용 후) ───────────────────────
                 if (cooldownText != null) {
                     Spacer(Modifier.height(12.dp))
                     Row(
-                        modifier          = Modifier
+                        modifier              = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(Color(0xFFFFF3F3))
                             .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center,
                     ) {
                         Icon(

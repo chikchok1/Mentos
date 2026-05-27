@@ -43,4 +43,17 @@ class GachaController(
         val status = gachaService.getAttendanceStatus(userId)
         return ResponseEntity.ok(status)
     }
+    @GetMapping("/user-state")
+    fun getUserGachaState(@RequestHeader("Authorization") authHeader: String?): ResponseEntity<Map<String, Any>> {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body(mapOf("error" to "인증 토큰이 없습니다."))
+        }
+        val token = authHeader.replace("Bearer ", "")
+        if (!jwtProvider.validateAccessToken(token)) {
+            return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
+        }
+        val userId = jwtProvider.getUserIdFromToken(token)
+        val state = gachaService.getUserGachaState(userId)
+        return ResponseEntity.ok(state)
+    }
 }
