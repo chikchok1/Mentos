@@ -9,9 +9,6 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
-    // URL은 local.properties → BuildConfig.BASE_URL 에서 읽어오므로 코드에 하드코딩하지 않아도 됩니다.
-    // 에뮬레이터: local.properties → BASE_URL=http://10.0.2.2:8080/
-    // 실기기   : local.properties → BASE_URL=http://<PC_IP>:8080/
     private val BASE_URL = com.example.personalfinance.BuildConfig.BASE_URL
 
     private var retrofit: Retrofit? = null
@@ -30,11 +27,7 @@ object ApiClient {
             }
 
             val authInterceptor = AuthInterceptor(tokenManager)
-            
-            // Authenticator 내부에서 API Call이 필요하므로, provider 방식으로 넘깁니다.
-            val authenticator = TokenAuthenticator(context, tokenManager) {
-                authApi!!
-            }
+            val authenticator = TokenAuthenticator(context, tokenManager) { authApi!! }
 
             val okHttpClient = OkHttpClient.Builder()
                 .addInterceptor(loggingInterceptor)
@@ -58,6 +51,7 @@ object ApiClient {
 
     private var gachaApi: GachaApi? = null
     private var classificationApi: ClassificationApi? = null
+    private var transactionApi: TransactionApi? = null
 
     @Synchronized
     fun getGachaApi(context: Context, tokenManager: TokenManager): GachaApi {
@@ -75,5 +69,24 @@ object ApiClient {
             classificationApi = retrofit!!.create(ClassificationApi::class.java)
         }
         return classificationApi!!
+    }
+
+    @Synchronized
+    fun getTransactionApi(context: Context, tokenManager: TokenManager): TransactionApi {
+        getAuthApi(context, tokenManager)
+        if (transactionApi == null) {
+            transactionApi = retrofit!!.create(TransactionApi::class.java)
+        }
+        return transactionApi!!
+    }
+
+    /** 로그아웃 시 호출 — 캐시된 API 인스턴스 및 Retrofit 초기화 */
+    @Synchronized
+    fun reset() {
+        retrofit         = null
+        authApi          = null
+        gachaApi         = null
+        classificationApi = null
+        transactionApi   = null
     }
 }

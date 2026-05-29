@@ -2,14 +2,22 @@ package com.example.personalfinance.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
+import com.example.personalfinance.network.ApiClient
+import com.example.personalfinance.network.SaveTransactionRequest
+import com.example.personalfinance.network.UpdateCategoryByClientIdRequest
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 data class UserStats(
     val currentLevel: Int = 1,
@@ -28,34 +36,32 @@ data class UserStats(
 }
 
 object UserStatsCalculator {
-    // 레벨 → 해당 레벨 도달에 필요한 누적 XP
     private val levelThresholds = listOf(
         1  to 0,
         2  to 50,
         3  to 120,
         4  to 220,
-        5  to 350,      // 견습 모험가
+        5  to 350,
         6  to 500,
         7  to 670,
         8  to 860,
         9  to 1_070,
-        10 to 1_300,    // 숙련 모험가
+        10 to 1_300,
         12 to 1_600,
         14 to 1_950,
         16 to 2_350,
         18 to 2_800,
-        20 to 3_300,    // 전문가
+        20 to 3_300,
         23 to 3_900,
         26 to 4_600,
         28 to 5_100,
-        30 to 5_700,    // 명인
+        30 to 5_700,
         35 to 6_800,
         40 to 8_100,
         45 to 9_600,
-        50 to 11_000    // 마스터
+        50 to 11_000
     )
 
-    // 레벨별 칭호
     fun levelTitle(level: Int): String = when {
         level >= 50 -> "마스터"
         level >= 30 -> "명인"
@@ -65,22 +71,20 @@ object UserStatsCalculator {
         else        -> "초보 모험가"
     }
 
-    // 카테고리 누적 지출 → 직업
     fun determineJob(categorySpending: Map<String, Long>): String {
         val top = categorySpending.filterValues { it > 0L }.maxByOrNull { it.value }?.key
             ?: return "beginner"
         return when (top) {
-            ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE         -> "cook"        // 요리사
-            ExpenseCategoryClassifier.CATEGORY_LIVING_MART       -> "manager"     // 생활관리사
-            ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE   -> "merchant"    // 상인
-            ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE   -> "artist"      // 예술가
-            ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> "planner"    // 관리자
-            ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL    -> "healer"      // 힐러
+            ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE         -> "cook"
+            ExpenseCategoryClassifier.CATEGORY_LIVING_MART       -> "manager"
+            ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE   -> "merchant"
+            ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE   -> "artist"
+            ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> "planner"
+            ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL    -> "healer"
             else                                                  -> "beginner"
         }
     }
 
-    // 직업 한글명
     fun jobTitle(job: String): String = when (job) {
         "cook"     -> "요리사"
         "manager"  -> "생활관리사"
@@ -91,15 +95,6 @@ object UserStatsCalculator {
         else       -> "모험가"
     }
 
-    /**
-     * 소비 기반 XP 계산 (SFR-301, SFR-302)
-     * - 기본 XP: 결제 1건당 10
-     * - 금액 보너스: 1만원당 +10, 최대 +100
-     * - 예산 달성 보정:
-     *     이번 달 지출이 예산 80% 이하  → 정상 지급
-     *     이번 달 지출이 예산 80~100%  → 50%만 지급
-     *     이번 달 지출이 예산 초과      → 최소 5 XP만 지급
-     */
     fun calculateEarnedXP(
         amount: Long,
         thisMonthSpending: Long = 0L,
@@ -116,33 +111,24 @@ object UserStatsCalculator {
         } else 1f
 
         return when {
-            budgetRatio > 1.0f -> MINIMUM_XP                        // 예산 초과
-            budgetRatio > 0.8f -> (rawXP * 0.5f).toInt().coerceAtLeast(MINIMUM_XP) // 80~100%
-            else               -> rawXP                             // 80% 이하 정상
+            budgetRatio > 1.0f -> MINIMUM_XP
+            budgetRatio > 0.8f -> (rawXP * 0.5f).toInt().coerceAtLeast(MINIMUM_XP)
+            else               -> rawXP
         }
     }
 
-    /**
-     * 현재 레벨 구간 내 진행률 (0.0 ~ 1.0)
-     * 예) Lv.5(350XP) ~ Lv.6(500XP) 사이에서 totalXP=400 이면 (400-350)/(500-350) = 0.33
-     * 마스터(Lv.50) 도달 시 1.0 반환
-     */
     fun levelProgress(totalXP: Int): Float {
         val normalizedXP = totalXP.coerceAtLeast(0)
         val currentLevelThreshold = levelThresholds.last { (_, xp) -> normalizedXP >= xp }.second
         val nextLevelThreshold = levelThresholds
             .firstOrNull { (_, xp) -> normalizedXP < xp }
             ?.second
-            ?: return 1f  // 마스터 도달
+            ?: return 1f
         val range = (nextLevelThreshold - currentLevelThreshold).toFloat()
         return if (range <= 0f) 1f
         else ((normalizedXP - currentLevelThreshold).toFloat() / range).coerceIn(0f, 1f)
     }
 
-    /**
-     * 현재 레벨 내 진행 XP / 다음 레벨까지 필요 XP (UI 표시용)
-     * 예) "50 / 150 XP"
-     */
     fun levelProgressXP(totalXP: Int): Pair<Int, Int> {
         val normalizedXP = totalXP.coerceAtLeast(0)
         val currentLevelThreshold = levelThresholds.last { (_, xp) -> normalizedXP >= xp }.second
@@ -171,8 +157,13 @@ object UserStatsCalculator {
 }
 
 class UserStatsStore private constructor(context: Context) {
-    private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    
+    private val appContext = context.applicationContext
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    // 서버 동기화용 코루틴 스코프 (앱 생명주기와 무관하게 유지)
+    private val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     private val _statsFlow = MutableStateFlow(loadStats())
     val statsFlow: StateFlow<UserStats> = _statsFlow.asStateFlow()
 
@@ -195,7 +186,9 @@ class UserStatsStore private constructor(context: Context) {
         }
         val thisMonthSpending = thisMonthTransactions.sumOf { it.amount }
         val thisMonthCategorySpending = ExpenseCategoryClassifier.categories
-            .associateWith { cat -> thisMonthTransactions.filter { it.category == cat }.sumOf { it.amount } }
+            .associateWith { cat ->
+                thisMonthTransactions.filter { it.category == cat }.sumOf { it.amount }
+            }
 
         return UserStats(
             currentLevel = UserStatsCalculator.calculateLevel(totalXP),
@@ -216,9 +209,7 @@ class UserStatsStore private constructor(context: Context) {
         source: String = TransactionSource.NOTIFICATION,
         transactionId: String? = null
     ): Boolean {
-        if (!TransactionPersistencePolicy.shouldPersist(status)) {
-            return false
-        }
+        if (!TransactionPersistencePolicy.shouldPersist(status)) return false
 
         val current = _statsFlow.value
         val normalizedCategory = if (category in ExpenseCategoryClassifier.categories) {
@@ -229,6 +220,13 @@ class UserStatsStore private constructor(context: Context) {
         val occurredAt = transactionDateTime ?: LocalDateTime.now()
         val displayDate = occurredAt.format(transactionDisplayFormatter)
         val normalizedMerchantName = merchantName.ifBlank { "Unknown" }
+        val clientId = transactionId ?: buildTransactionId(
+            source = source,
+            occurredAt = occurredAt.toString(),
+            amount = amount,
+            merchantName = normalizedMerchantName,
+            category = normalizedCategory
+        )
         val transaction = Transaction(
             store = normalizedMerchantName,
             date = displayDate,
@@ -237,13 +235,7 @@ class UserStatsStore private constructor(context: Context) {
             status = status,
             source = source,
             occurredAt = occurredAt.toString(),
-            id = transactionId ?: buildTransactionId(
-                source = source,
-                occurredAt = occurredAt.toString(),
-                amount = amount,
-                merchantName = normalizedMerchantName,
-                category = normalizedCategory
-            )
+            id = clientId
         )
         val currentTransactions = _transactionsFlow.value
         val newTransactions = TransactionHistory.prependIfAbsent(
@@ -251,11 +243,8 @@ class UserStatsStore private constructor(context: Context) {
             transaction = transaction
         )
 
-        if (newTransactions === currentTransactions) {
-            return false
-        }
+        if (newTransactions === currentTransactions) return false
 
-        // 이번 달 트랜잭션만 필터링해서 지출/카테고리 재계산
         val thisMonth = YearMonth.now()
         val thisMonthTxs = newTransactions.filter { tx ->
             runCatching {
@@ -264,7 +253,9 @@ class UserStatsStore private constructor(context: Context) {
         }
         val newSpending = thisMonthTxs.sumOf { it.amount }
         val newCategorySpending = ExpenseCategoryClassifier.categories
-            .associateWith { cat -> thisMonthTxs.filter { it.category == cat }.sumOf { it.amount } }
+            .associateWith { cat ->
+                thisMonthTxs.filter { it.category == cat }.sumOf { it.amount }
+            }
 
         val newTotalXP = current.currentXP + UserStatsCalculator.calculateEarnedXP(
             amount = amount,
@@ -282,6 +273,32 @@ class UserStatsStore private constructor(context: Context) {
         )
 
         saveStats(newStats, newTransactions)
+
+        // ── 서버 동기화 (fire-and-forget) ──────────────────────────────────────
+        // 로컬 저장 완료 후 백그라운드로 서버에 전송. 실패해도 앱 동작에 영향 없음.
+        syncScope.launch {
+            try {
+                val tokenManager = TokenManager(appContext)
+                val api = ApiClient.getTransactionApi(appContext, tokenManager)
+                val req = SaveTransactionRequest(
+                    amount              = amount,
+                    merchantName        = normalizedMerchantName,
+                    category            = normalizedCategory,
+                    occurredAt          = occurredAt.toString(),
+                    source              = source,
+                    clientTransactionId = clientId
+                )
+                val resp = api.save(req)
+                if (resp.isSuccessful) {
+                    Log.d(TAG, "서버 동기화 완료: clientId=$clientId")
+                } else {
+                    Log.w(TAG, "서버 동기화 실패 (HTTP ${resp.code()}): clientId=$clientId")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "서버 동기화 예외 (오프라인?): ${e.message}")
+            }
+        }
+
         return true
     }
 
@@ -312,7 +329,9 @@ class UserStatsStore private constructor(context: Context) {
         }
         val newSpending = thisMonthTxs.sumOf { it.amount }
         val newCategorySpending = ExpenseCategoryClassifier.categories
-            .associateWith { cat -> thisMonthTxs.filter { it.category == cat }.sumOf { it.amount } }
+            .associateWith { cat ->
+                thisMonthTxs.filter { it.category == cat }.sumOf { it.amount }
+            }
 
         val newStats = current.copy(
             thisMonthSpending = newSpending,
@@ -321,15 +340,29 @@ class UserStatsStore private constructor(context: Context) {
         )
 
         saveStats(newStats, newTransactions)
+
+        // ── 서버 동기화 (fire-and-forget) ──────────────────────────────────────
+        syncScope.launch {
+            try {
+                val tokenManager = TokenManager(appContext)
+                val api = ApiClient.getTransactionApi(appContext, tokenManager)
+                val req = UpdateCategoryByClientIdRequest(
+                    clientTransactionId = transactionId,
+                    category            = normalizedCategory
+                )
+                val resp = api.updateCategoryByClientId(req)
+                if (resp.isSuccessful) {
+                    Log.d(TAG, "카테고리 서버 동기화 완료: clientId=$transactionId")
+                } else {
+                    Log.w(TAG, "카테고리 서버 동기화 실패 (HTTP ${resp.code()}): clientId=$transactionId")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "카테고리 서버 동기화 예외: ${e.message}")
+            }
+        }
+
         return true
     }
-
-
-
-    private fun loadCategorySpending(): Map<String, Long> =
-        ExpenseCategoryClassifier.categories.associateWith { category ->
-            prefs.getLong(categorySpendingKey(category), 0L)
-        }
 
     private fun loadTransactions(): List<Transaction> =
         TransactionJsonCodec.decode(prefs.getString(KEY_TRANSACTIONS, null).orEmpty())
@@ -348,7 +381,7 @@ class UserStatsStore private constructor(context: Context) {
         }
 
         editor.apply()
-        
+
         _statsFlow.value = stats
         _transactionsFlow.value = transactions
     }
@@ -365,6 +398,7 @@ class UserStatsStore private constructor(context: Context) {
     ): String = "$source|$occurredAt|$amount|$merchantName|$category"
 
     companion object {
+        private const val TAG = "UserStatsStore"
         private const val PREFS_NAME = "user_stats_prefs"
         private const val KEY_LEVEL = "key_level"
         private const val KEY_XP = "key_xp"
@@ -391,8 +425,6 @@ internal object TransactionPersistencePolicy {
         status == TransactionStatus.APPROVED_RECORDED
 }
 
-
-
 internal object TransactionHistory {
     private const val MAX_TRANSACTIONS = 200
 
@@ -400,10 +432,7 @@ internal object TransactionHistory {
         current: List<Transaction>,
         transaction: Transaction
     ): List<Transaction> {
-        if (current.any { it.id == transaction.id }) {
-            return current
-        }
-
+        if (current.any { it.id == transaction.id }) return current
         return (listOf(transaction) + current).take(MAX_TRANSACTIONS)
     }
 }

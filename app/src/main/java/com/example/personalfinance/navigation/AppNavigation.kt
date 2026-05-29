@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import com.example.personalfinance.data.TokenManager
+import com.example.personalfinance.network.ApiClient
 import org.json.JSONObject
 import com.example.personalfinance.ui.main.HomeScreen
 import com.example.personalfinance.ui.main.LedgerScreen
@@ -151,6 +152,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                 },
                 onLogout = {
                     tokenManager.clearTokens()
+                    ApiClient.reset()
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true } // 모든 백스택을 지우고 로그인 화면으로
                     }

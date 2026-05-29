@@ -20,6 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
 import com.example.personalfinance.data.ExpenseCategoryClassifier
+import com.example.personalfinance.data.TransactionSource
+import com.example.personalfinance.data.TransactionStatus
 import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.data.categoryEmoji
 import com.example.personalfinance.ui.theme.*
@@ -160,8 +162,8 @@ fun NewRecordScreen(navController: NavController) {
                 .padding(horizontal = 24.dp, vertical = 4.dp),
             shape         = RoundedCornerShape(16.dp),
             colors        = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor   = Blue400,
-                unfocusedBorderColor = Gray200,
+                focusedBorderColor      = Blue400,
+                unfocusedBorderColor    = Gray200,
                 unfocusedContainerColor = Gray50,
                 focusedContainerColor   = Color.White
             ),
@@ -208,7 +210,7 @@ fun NewRecordScreen(navController: NavController) {
                 }
             }
 
-            // Save button
+            // ── Save Button ───────────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -224,7 +226,9 @@ fun NewRecordScreen(navController: NavController) {
                         store.addExpense(
                             amount       = parsedAmount,
                             category     = selectedCategory!!,
-                            merchantName = note.ifBlank { selectedCategory!! }
+                            merchantName = note.ifBlank { selectedCategory!! },
+                            status       = TransactionStatus.APPROVED_RECORDED,
+                            source       = TransactionSource.MANUAL   // ← 수동 입력 명시
                         )
                         navController.popBackStack()
                     },
