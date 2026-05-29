@@ -3,6 +3,7 @@ package com.example.personalfinance.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ── Brand Colors ──────────────────────────────────────────────────────────────
+val Blue300  = Color(0xFFAEC6FF)
 val Blue400  = Color(0xFF7FA4FF)
 val Blue500  = Color(0xFF6B94FF)
 val Purple400 = Color(0xFFB17CFF)
