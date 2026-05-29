@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import com.example.personalfinance.data.TokenManager
+import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.network.ApiClient
 import org.json.JSONObject
 import com.example.personalfinance.ui.main.HomeScreen
@@ -145,12 +146,14 @@ fun AppNavigation(tokenManager: TokenManager) {
         composable(Screen.Ledger.route)    { LedgerScreen(navController)    }
         composable(Screen.NewRecord.route) { NewRecordScreen(navController) }
         composable(Screen.Menu.route)      { 
+            val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
             MenuScreen(
                 navController = navController,
                 onNotificationDebugClick = {
                     navController.navigate(Screen.NotificationDebug.route)
                 },
                 onLogout = {
+                    UserStatsStore.getInstance(context).clearForLogout()
                     tokenManager.clearTokens()
                     ApiClient.reset()
                     navController.navigate(Screen.Login.route) {

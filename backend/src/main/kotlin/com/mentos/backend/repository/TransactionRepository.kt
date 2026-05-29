@@ -19,11 +19,11 @@ interface TransactionRepository : JpaRepository<Transaction, Long> {
     /** 특정 유저의 전체 거래 목록 (최신순) */
     fun findByUserIdOrderByOccurredAtDesc(userId: Long): List<Transaction>
 
-    /** clientTransactionId 중복 체크 */
-    fun existsByClientTransactionId(clientTransactionId: String): Boolean
+    /** userId + clientTransactionId 중복 체크 */
+    fun existsByUserIdAndClientTransactionId(userId: Long, clientTransactionId: String): Boolean
 
-    /** clientTransactionId로 단건 조회 */
-    fun findByClientTransactionId(clientTransactionId: String): Optional<Transaction>
+    /** userId + clientTransactionId로 단건 조회 */
+    fun findByUserIdAndClientTransactionId(userId: Long, clientTransactionId: String): Optional<Transaction>
 
     /** 월별 카테고리별 합계 — (category, sum) 쌍으로 반환 */
     @Query("""

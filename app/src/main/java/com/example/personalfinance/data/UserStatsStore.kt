@@ -17,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class UserStats(
@@ -159,7 +160,7 @@ object UserStatsCalculator {
 class UserStatsStore private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val prefs: SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     // 서버 동기화용 코루틴 스코프 (앱 생명주기와 무관하게 유지)
     private val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -343,25 +344,16 @@ class UserStatsStore private constructor(context: Context) {
 
         // ── 서버 동기화 (fire-and-forget) ──────────────────────────────────────
         syncScope.launch {
-            try {
-                val tokenManager = TokenManager(appContext)
-                val api = ApiClient.getTransactionApi(appContext, tokenManager)
-                val req = UpdateCategoryByClientIdRequest(
-                    clientTransactionId = transactionId,
-                    category            = normalizedCategory
-                )
-                val resp = api.updateCategoryByClientId(req)
-                if (resp.isSuccessful) {
-                    Log.d(TAG, "카테고리 서버 동기화 완료: clientId=$transactionId")
-                } else {
-                    Log.w(TAG, "카테고리 서버 동기화 실패 (HTTP ${resp.code()}): clientId=$transactionId")
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "카테고리 서버 동기화 예외: ${e.message}")
-            }
+            syncCategoryUpdateWithRetry(transactionId, normalizedCategory)
         }
 
         return true
+    }
+
+    fun clearForLogout() {
+        prefs.edit().clear().apply()
+        _transactionsFlow.value = emptyList()
+        _statsFlow.value = UserStats()
     }
 
     private fun loadTransactions(): List<Transaction> =
@@ -396,6 +388,41 @@ class UserStatsStore private constructor(context: Context) {
         merchantName: String,
         category: String
     ): String = "$source|$occurredAt|$amount|$merchantName|$category"
+
+    private suspend fun syncCategoryUpdateWithRetry(transactionId: String, category: String) {
+        val tokenManager = TokenManager(appContext)
+        val api = ApiClient.getTransactionApi(appContext, tokenManager)
+        val req = UpdateCategoryByClientIdRequest(
+            clientTransactionId = transactionId,
+            category = category
+        )
+        val retryDelaysMs = longArrayOf(1_000L, 3_000L, 5_000L)
+
+        repeat(retryDelaysMs.size) { attempt ->
+            try {
+                val resp = api.updateCategoryByClientId(req)
+                if (resp.isSuccessful) {
+                    Log.d(TAG, "카테고리 서버 동기화 완료: clientId=$transactionId")
+                    return
+                }
+
+                Log.w(
+                    TAG,
+                    "카테고리 서버 동기화 실패 attempt=${attempt + 1} " +
+                        "(HTTP ${resp.code()}): clientId=$transactionId"
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "카테고리 서버 동기화 예외 attempt=${attempt + 1}: ${e.message}")
+            }
+
+            if (attempt < retryDelaysMs.lastIndex) {
+                delay(retryDelaysMs[attempt])
+            }
+        }
+
+        // TODO: 앱 재시작 후에도 재시도할 수 있도록 pending sync 큐를 영속화한다.
+        Log.w(TAG, "카테고리 서버 동기화 재시도 보류 필요: clientId=$transactionId")
+    }
 
     companion object {
         private const val TAG = "UserStatsStore"

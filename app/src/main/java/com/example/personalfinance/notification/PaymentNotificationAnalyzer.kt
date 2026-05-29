@@ -32,7 +32,7 @@ object PaymentNotificationAnalyzer {
             PaymentNotificationClassifier.classify(title = title, text = text)
         }
 
-        val category = ExpenseCategoryClassifier.CATEGORY_OTHER
+        val category = ExpenseCategoryClassifier.classifyMerchant(parseResult.merchantName)
 
         val status = when {
             notificationType == PaymentNotificationType.CANCELED -> PaymentNotificationAnalysisStatus.CANCELED

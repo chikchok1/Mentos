@@ -6,6 +6,12 @@ import java.time.LocalDateTime
 @Entity
 @Table(
     name = "transactions",
+    uniqueConstraints = [
+        UniqueConstraint(
+            name = "uk_transactions_user_client_transaction",
+            columnNames = ["userId", "clientTransactionId"]
+        )
+    ],
     indexes = [
         Index(name = "idx_transactions_user_occurred", columnList = "userId, occurredAt")
     ]
@@ -39,7 +45,7 @@ class Transaction(
     val source: String = "MANUAL",
 
     /** 앱에서 생성한 고유 ID (중복 저장 방지) — nullable */
-    @Column(nullable = true, unique = true, length = 512)
+    @Column(nullable = true, length = 512)
     val clientTransactionId: String? = null,
 
     @Column(nullable = false)

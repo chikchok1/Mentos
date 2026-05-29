@@ -119,8 +119,8 @@ class CardNotificationListenerService : NotificationListenerService() {
         }
         val serviceScope = this.serviceScope
         serviceScope.launch {
-            // 백엔드 AI 파싱 API 호출 (로컬 사전 제거)
-            var category = ExpenseCategoryClassifier.CATEGORY_OTHER
+            // 로컬 기본 분류 후 백엔드 AI 결과로 보정
+            var category = ExpenseCategoryClassifier.classifyMerchant(result.merchantName)
 
             if (result.merchantName.isNotBlank()) {
                 try {

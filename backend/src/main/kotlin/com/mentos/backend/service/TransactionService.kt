@@ -3,6 +3,7 @@ package com.mentos.backend.service
 import com.mentos.backend.dto.*
 import com.mentos.backend.entity.Transaction
 import com.mentos.backend.repository.TransactionRepository
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -18,11 +19,12 @@ class TransactionService(
     @Transactional
     fun save(userId: Long, req: SaveTransactionRequest): TransactionResponse {
         // clientTransactionId가 있으면 중복 체크
-        if (req.clientTransactionId != null &&
-            transactionRepository.existsByClientTransactionId(req.clientTransactionId)
+        val clientTransactionId = req.clientTransactionId
+        if (clientTransactionId != null &&
+            transactionRepository.existsByUserIdAndClientTransactionId(userId, clientTransactionId)
         ) {
             val existing = transactionRepository
-                .findByClientTransactionId(req.clientTransactionId)
+                .findByUserIdAndClientTransactionId(userId, clientTransactionId)
                 .orElse(null)
             if (existing != null) return existing.toResponse()
         }
@@ -34,9 +36,17 @@ class TransactionService(
             category            = req.category,
             occurredAt          = req.occurredAt,
             source              = req.source,
-            clientTransactionId = req.clientTransactionId
+            clientTransactionId = clientTransactionId
         )
-        return transactionRepository.save(entity).toResponse()
+        return try {
+            transactionRepository.save(entity).toResponse()
+        } catch (e: DataIntegrityViolationException) {
+            if (clientTransactionId == null) throw e
+            transactionRepository
+                .findByUserIdAndClientTransactionId(userId, clientTransactionId)
+                .orElseThrow { e }
+                .toResponse()
+        }
     }
 
     // ── 조회 ────────────────────────────────────────────────────────────────
@@ -128,12 +138,8 @@ class TransactionService(
         clientTransactionId: String,
         newCategory: String
     ): TransactionResponse {
-        val tx = transactionRepository.findByClientTransactionId(clientTransactionId)
+        val tx = transactionRepository.findByUserIdAndClientTransactionId(userId, clientTransactionId)
             .orElseThrow { NoSuchElementException("거래 내역을 찾을 수 없습니다. clientId=$clientTransactionId") }
-
-        if (tx.userId != userId) {
-            throw IllegalAccessException("해당 거래 내역에 접근 권한이 없습니다.")
-        }
 
         tx.category = newCategory
         return transactionRepository.save(tx).toResponse()
