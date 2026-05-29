@@ -7,10 +7,10 @@ enum class GachaGrade(
     val weight: Int,             // 가중치 (합계 100)
     val duplicateCoin: Int       // 중복 시 지급 코인
 ) {
-    COMMON("Common", 70, 2),
-    RARE("Rare", 15, 5),
-    UNIQUE("Unique", 4, 10),
-    LEGENDARY("Legendary", 1, 30)
+    COMMON("Common", 55, 2),
+    RARE("Rare", 30, 5),
+    UNIQUE("Unique", 10, 10),
+    LEGENDARY("Legendary", 5, 30)
 }
 
 // ── 가챠 아이템 ───────────────────────────────────────────────────────────────

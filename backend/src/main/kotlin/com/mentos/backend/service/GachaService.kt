@@ -60,11 +60,66 @@ class GachaService(
         )
     }
 
+    @Transactional
+    fun resetAttendance(): Map<String, Any> {
+        val allUsers = userRepository.findAll()
+        allUsers.forEach { it.lastAttendanceDate = null }
+        userRepository.saveAll(allUsers)
+        return mapOf(
+            "success" to true,
+            "message" to "출석체크가 초기화되었습니다.",
+            "resetCount" to allUsers.size
+        )
+    }
+
     fun getUserGachaState(userId: Long): Map<String, Any> {
         val user = userRepository.findById(userId).orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
         return mapOf(
             "coins" to user.coins,
             "ownedItems" to user.ownedItems.toList()
+        )
+    }
+
+    @Transactional
+    fun performCoinGacha(userId: Long): Map<String, Any> {
+        val user = userRepository.findById(userId).orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
+
+        if (user.coins < 10) {
+            throw IllegalStateException("코인이 부족합니다. (보유: ${user.coins}, 필요: 10)")
+        }
+
+        // 코인 차감
+        user.coins -= 10
+
+        // 가챠 굴리기
+        val result = GachaEngine.roll(user.ownedItems)
+
+        var isDuplicate = false
+        var coinReward = 0
+        var itemId = ""
+
+        when (result) {
+            is GachaResult.NewItem -> {
+                user.ownedItems.add(result.item.id)
+                itemId = result.item.id
+            }
+            is GachaResult.DuplicateCoin -> {
+                isDuplicate = true
+                coinReward = result.coins
+                user.coins += coinReward
+                itemId = result.item.id
+            }
+        }
+
+        userRepository.save(user)
+
+        return mapOf(
+            "success"    to true,
+            "message"    to "코인 가챠가 완료되었습니다.",
+            "itemId"     to itemId,
+            "isDuplicate" to isDuplicate,
+            "coinReward" to coinReward,
+            "totalCoins" to user.coins
         )
     }
 }

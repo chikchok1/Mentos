@@ -13,4 +13,7 @@ interface GachaApi {
 
     @GET("api/gacha/user-state")
     suspend fun getUserGachaState(): Response<Map<String, Any>>
+
+    @POST("api/gacha/coin")
+    suspend fun performCoinGacha(): Response<Map<String, Any>>
 }

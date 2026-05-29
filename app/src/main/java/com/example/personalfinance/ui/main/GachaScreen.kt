@@ -65,11 +65,12 @@ fun GachaScreen(navController: NavController) {
     val gachaApi       = remember { ApiClient.getGachaApi(context, tokenManager) }
 
     // ── 상태 ──────────────────────────────────────────────────────────────────
-    var attendanceUsed   by remember { mutableStateOf(false) }
-    var countdownText    by remember { mutableStateOf(gachaStore.timeUntilMidnight()) }
-    var coins            by remember { mutableStateOf(0) }
-    var gachaResult      by remember { mutableStateOf<GachaResult?>(null) }
-    var showResultDialog by remember { mutableStateOf(false) }
+    var attendanceUsed    by remember { mutableStateOf(false) }
+    var countdownText     by remember { mutableStateOf(gachaStore.timeUntilMidnight()) }
+    var coins             by remember { mutableStateOf(0) }
+    var gachaResult       by remember { mutableStateOf<GachaResult?>(null) }
+    var showResultDialog  by remember { mutableStateOf(false) }
+    var showProbDialog    by remember { mutableStateOf(false) }
 
     // 서버 상태 조회 및 타이머 루프
     LaunchedEffect(Unit) {
@@ -190,7 +191,26 @@ fun GachaScreen(navController: NavController) {
                 )
             }
 
-            GachaProbabilityRow()
+            // ── 확률 보기 버튼 ────────────────────────────────────────────
+            OutlinedButton(
+                onClick  = { showProbDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape    = RoundedCornerShape(14.dp),
+                border   = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            ) {
+                Icon(
+                    imageVector        = Icons.Rounded.BarChart,
+                    contentDescription = null,
+                    tint               = Gray600,
+                    modifier           = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text  = "확률 보기",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Gray600,
+                )
+            }
             Spacer(Modifier.height(20.dp))
 
             machines.forEach { machine ->
@@ -246,7 +266,37 @@ fun GachaScreen(navController: NavController) {
                                 }
                             }
                             "ad"   -> adWatched = true
-                            "coin" -> { /* TODO: 코인 뽑기 API 연동 */ }
+                            "coin" -> {
+                                coroutineScope.launch {
+                                    try {
+                                        val response = gachaApi.performCoinGacha()
+                                        if (response.isSuccessful) {
+                                            val body       = response.body()
+                                            val itemId     = body?.get("itemId") as? String
+                                            val isDup      = body?.get("isDuplicate") as? Boolean ?: false
+                                            val coinRew    = (body?.get("coinReward") as? Number)?.toInt() ?: 0
+                                            val totalCoins = (body?.get("totalCoins") as? Number)?.toInt() ?: 0
+                                            if (itemId != null) {
+                                                val item = GachaItemPool.findById(itemId)
+                                                if (item != null) {
+                                                    gachaResult = if (isDup)
+                                                        GachaResult.DuplicateCoin(item, coinRew)
+                                                    else
+                                                        GachaResult.NewItem(item)
+                                                    coins           = totalCoins
+                                                    showResultDialog = true
+                                                }
+                                            }
+                                        } else {
+                                            val errBody = response.errorBody()?.string() ?: ""
+                                            val msg = if (errBody.contains("부족")) "코인이 부족합니다 (필요: 10개)" else "오류가 발생했습니다."
+                                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "네트워크 오류", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
                         }
                     },
                 )
@@ -273,37 +323,170 @@ fun GachaScreen(navController: NavController) {
             onDismiss = { showResultDialog = false }
         )
     }
+
+    // ── 확률 보기 다이얼로그 ──────────────────────────────────────────────────
+    if (showProbDialog) {
+        GachaProbabilityDialog(onDismiss = { showProbDialog = false })
+    }
 }
 
-// ── 확률 안내 행 ──────────────────────────────────────────────────────────────
+// ── 확률 다이얼로그 ────────────────────────────────────────────────────────────
+
+private data class GradeInfo(val name: String, val pct: String, val color: Color)
+
+private val attendanceGrades = listOf(
+    GradeInfo("Common",    "60%", Color(0xFF9E9E9E)),
+    GradeInfo("Rare",      "25%", Color(0xFF1976D2)),
+    GradeInfo("Unique",    "10%", Color(0xFF7B1FA2)),
+    GradeInfo("Legendary",  "5%", Color(0xFFE65100)),
+)
+
+private val coinGrades = listOf(
+    GradeInfo("Common",    "55%", Color(0xFF9E9E9E)),
+    GradeInfo("Rare",      "30%", Color(0xFF1976D2)),
+    GradeInfo("Unique",    "10%", Color(0xFF7B1FA2)),
+    GradeInfo("Legendary",  "5%", Color(0xFFE65100)),
+)
 
 @Composable
-private fun GachaProbabilityRow() {
-    val grades = listOf(
-        Triple("Common",    "70%", Color(0xFF9E9E9E)),
-        Triple("Rare",      "15%", Color(0xFF1976D2)),
-        Triple("Unique",     "4%", Color(0xFF7B1FA2)),
-        Triple("Legendary",  "1%", Color(0xFFE65100)),
-    )
-    Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFFF8F9FA))
-            .padding(vertical = 12.dp, horizontal = 8.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+private fun GachaProbabilityDialog(onDismiss: () -> Unit) {
+    var selectedTab by remember { mutableStateOf(0) }  // 0 = 출석, 1 = 코인
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties       = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        grades.forEach { (name, pct, color) ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
+        Card(
+            modifier  = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            shape     = RoundedCornerShape(24.dp),
+            colors    = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+
+                // 제목
+                Row(
+                    modifier          = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text       = "확률 안내",
+                        style      = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color      = Gray900,
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Rounded.Close, contentDescription = "닫기", tint = Gray400)
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // 탭 (출석 가챠 / 코인 가챠)
+                Row(
                     modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(color)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF5F5F5))
+                        .padding(4.dp),
+                ) {
+                    listOf("🎁 출석 가챠", "🪙 코인 가챠").forEachIndexed { index, label ->
+                        val selected = selectedTab == index
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (selected) Color.White else Color.Transparent
+                                )
+                                .clickable { selectedTab = index }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text       = label,
+                                style      = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color      = if (selected) Gray900 else Gray500,
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // 확률 테이블
+                val grades = if (selectedTab == 0) attendanceGrades else coinGrades
+
+                grades.forEach { grade ->
+                    Row(
+                        modifier          = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // 색상 도트
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(grade.color)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        // 등급명
+                        Text(
+                            text       = grade.name,
+                            style      = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = grade.color,
+                            modifier   = Modifier.weight(1f),
+                        )
+                        // 확률 바
+                        val pctValue = grade.pct.replace("%", "").toFloatOrNull() ?: 0f
+                        Box(
+                            modifier = Modifier
+                                .width(120.dp)
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color(0xFFF0F0F0))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(pctValue / 100f)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(grade.color)
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        // 확률 텍스트
+                        Text(
+                            text      = grade.pct,
+                            style     = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color     = Gray700,
+                        )
+                    }
+                    if (grade != grades.last()) {
+                        HorizontalDivider(color = Color(0xFFF5F5F5))
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // 부가 설명
+                val note = if (selectedTab == 0)
+                    "출석 가챠는 매일 무료로 한 번 참여할 수 있어요."
+                else
+                    "코인 가챠는 코인 10개를 소모해 참여해요."
+                Text(
+                    text  = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Gray400,
                 )
-                Spacer(Modifier.height(4.dp))
-                Text(text = name, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.SemiBold)
-                Text(text = pct,  style = MaterialTheme.typography.labelSmall, color = Gray500)
             }
         }
     }

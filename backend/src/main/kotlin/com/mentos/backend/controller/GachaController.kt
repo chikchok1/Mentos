@@ -30,6 +30,23 @@ class GachaController(
         }
     }
     
+    @PostMapping("/attendance/reset")
+    fun resetAttendance(@RequestHeader("Authorization") authHeader: String?): ResponseEntity<Map<String, Any>> {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body(mapOf("error" to "인증 토큰이 없습니다."))
+        }
+        val token = authHeader.replace("Bearer ", "")
+        if (!jwtProvider.validateAccessToken(token)) {
+            return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
+        }
+        return try {
+            val result = gachaService.resetAttendance()
+            ResponseEntity.ok(result)
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "초기화 중 오류가 발생했습니다.")))
+        }
+    }
+
     @GetMapping("/attendance/status")
     fun getAttendanceStatus(@RequestHeader("Authorization") authHeader: String?): ResponseEntity<Map<String, Any>> {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -55,5 +72,24 @@ class GachaController(
         val userId = jwtProvider.getUserIdFromToken(token)
         val state = gachaService.getUserGachaState(userId)
         return ResponseEntity.ok(state)
+    }
+
+    @PostMapping("/coin")
+    fun performCoinGacha(@RequestHeader("Authorization") authHeader: String?): ResponseEntity<Map<String, Any>> {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body(mapOf("error" to "인증 토큰이 없습니다."))
+        }
+        val token = authHeader.replace("Bearer ", "")
+        if (!jwtProvider.validateAccessToken(token)) {
+            return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
+        }
+        val userId = jwtProvider.getUserIdFromToken(token)
+
+        return try {
+            val result = gachaService.performCoinGacha(userId)
+            ResponseEntity.ok(result)
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "코인 가챠 처리 중 오류가 발생했습니다.")))
+        }
     }
 }

@@ -12,25 +12,25 @@ enum class GachaGrade(
 ) {
     COMMON(
         displayName     = "Common",
-        weight          = 70,
+        weight          = 55,
         duplicateCoin   = 2,
         gradientColors  = listOf(0xFF9E9E9E, 0xFFBDBDBD),
     ),
     RARE(
         displayName     = "Rare",
-        weight          = 15,
+        weight          = 30,
         duplicateCoin   = 5,
         gradientColors  = listOf(0xFF1565C0, 0xFF42A5F5),
     ),
     UNIQUE(
         displayName     = "Unique",
-        weight          = 4,
+        weight          = 10,
         duplicateCoin   = 10,
         gradientColors  = listOf(0xFF6A1B9A, 0xFFCE93D8),
     ),
     LEGENDARY(
         displayName     = "Legendary",
-        weight          = 1,
+        weight          = 5,
         duplicateCoin   = 30,
         gradientColors  = listOf(0xFFE65100, 0xFFFFD54F),
     ),
