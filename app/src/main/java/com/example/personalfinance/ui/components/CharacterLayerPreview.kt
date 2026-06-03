@@ -21,10 +21,6 @@ import androidx.compose.ui.unit.sp
 
 // ── Assets에서 Bitmap 로드 유틸 ───────────────────────────────────────────────
 
-/**
- * assets 폴더에서 PNG를 읽어 ImageBitmap으로 반환.
- * 실패 시 null 반환.
- */
 fun loadAssetBitmap(context: Context, assetPath: String): ImageBitmap? {
     return try {
         context.assets.open(assetPath).use { stream ->
@@ -35,40 +31,50 @@ fun loadAssetBitmap(context: Context, assetPath: String): ImageBitmap? {
     }
 }
 
-// ── CharacterLayerPreview ─────────────────────────────────────────────────────
+// ── 전체 레이어 상태 ──────────────────────────────────────────────────────────
 
 /**
- * assets/character_layers/ 폴더의 PNG 파일을 레이어 순서대로 겹쳐 그리는 테스트 컴포넌트.
+ * 캐릭터를 구성하는 모든 레이어 선택값.
+ * null = 해당 카테고리 없음(스킵).
  *
- * 레이어 순서 (아래 → 위):
- *   1. base/base_body.png
- *   2. faces/f_closed_smile.png  (또는 외부에서 지정한 facePath)
- *
- * 이후 옷·머리·모자·악세사리 레이어도 [extraLayers]에 경로만 추가하면 됩니다.
- *
- * @param facePath     faces/ 폴더 기준 파일명 (기본값: "f_closed_smile.png")
- * @param extraLayers  추가 레이어 asset 경로 목록 (위에서부터 순서대로 쌓임)
- * @param size         정사각형 캔버스 크기
+ * 레이어 합성 순서:
+ *   base_body → botClothes → topClothes → hair → hat → face → accessory
+ */
+data class CharacterLayerState(
+    val face: String?       = null,   // character_layers/faces/ 기준 파일명
+    val hair: String?       = null,   // character_layers/hairs/ 기준 파일명
+    val hat: String?        = null,   // character_layers/hats/ 기준 파일명
+    val accessory: String?  = null,   // character_layers/accessories/ 기준 파일명
+    val topClothes: String? = null,   // character_layers/clothes/ 기준 파일명
+    val botClothes: String? = null,   // character_layers/clothes/ 기준 파일명
+)
+
+// ── CharacterLayerPreview (전체 레이어 지원) ──────────────────────────────────
+
+/**
+ * CharacterLayerState 기반으로 모든 레이어를 합성해 보여주는 컴포저블.
  */
 @Composable
 fun CharacterLayerPreview(
-    facePath: String = "faces/f_closed_smile.png",
-    extraLayers: List<String> = emptyList(),
+    layerState: CharacterLayerState = CharacterLayerState(),
     size: Dp = 256.dp,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
 
-    // 레이어 경로 목록 (순서 = 렌더링 순서)
-    val layerPaths = remember(facePath, extraLayers) {
-        buildList {
-            add("character_layers/base/base_body.png")
-            add("character_layers/$facePath")
-            extraLayers.forEach { add("character_layers/$it") }
-        }
+    // 레이어 순서: base → bot → top → hair → hat → face → accessory
+    val layerPaths = remember(layerState) {
+        listOfNotNull(
+            "character_layers/base/base_body.png",
+            layerState.botClothes?.let  { "character_layers/clothes/$it"     },
+            layerState.topClothes?.let  { "character_layers/clothes/$it"     },
+            layerState.hair?.let        { "character_layers/hairs/$it"       },
+            layerState.hat?.let         { "character_layers/hats/$it"        },
+            layerState.face?.let        { "character_layers/faces/$it"       },
+            layerState.accessory?.let   { "character_layers/accessories/$it" },
+        )
     }
 
-    // 각 레이어를 비동기로 로드
     val bitmaps = remember(layerPaths) {
         mutableStateListOf<ImageBitmap?>(*arrayOfNulls(layerPaths.size))
     }
@@ -80,23 +86,70 @@ fun CharacterLayerPreview(
     }
 
     Box(
-        modifier = modifier.size(size),
+        modifier         = modifier.size(size),
         contentAlignment = Alignment.Center,
     ) {
         bitmaps.forEach { bitmap ->
             if (bitmap != null) {
                 Image(
-                    bitmap = bitmap,
+                    bitmap             = bitmap,
                     contentDescription = null,
-                    contentScale = ContentScale.Fit,   // 비율 유지, 크기 맞춤
-                    modifier = Modifier.fillMaxSize(), // 항상 동일한 (0,0) 기준
+                    contentScale       = ContentScale.Fit,
+                    modifier           = Modifier.fillMaxSize(),
                 )
             }
         }
     }
 }
 
-// ── Preview (Android Studio 미리보기) ─────────────────────────────────────────
+/**
+ * 기존 facePath + extraLayers 방식 오버로드 — 하위 호환용.
+ */
+@Composable
+fun CharacterLayerPreview(
+    facePath: String = "faces/f_closed_smile.png",
+    extraLayers: List<String> = emptyList(),
+    size: Dp = 256.dp,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+
+    val layerPaths = remember(facePath, extraLayers) {
+        buildList {
+            add("character_layers/base/base_body.png")
+            add("character_layers/$facePath")
+            extraLayers.forEach { add("character_layers/$it") }
+        }
+    }
+
+    val bitmaps = remember(layerPaths) {
+        mutableStateListOf<ImageBitmap?>(*arrayOfNulls(layerPaths.size))
+    }
+
+    LaunchedEffect(layerPaths) {
+        layerPaths.forEachIndexed { index, path ->
+            bitmaps[index] = loadAssetBitmap(context, path)
+        }
+    }
+
+    Box(
+        modifier         = modifier.size(size),
+        contentAlignment = Alignment.Center,
+    ) {
+        bitmaps.forEach { bitmap ->
+            if (bitmap != null) {
+                Image(
+                    bitmap             = bitmap,
+                    contentDescription = null,
+                    contentScale       = ContentScale.Fit,
+                    modifier           = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
+}
+
+// ── Preview ───────────────────────────────────────────────────────────────────
 
 @Preview(showBackground = true, backgroundColor = 0xFFEEEEEE)
 @Composable
@@ -106,10 +159,10 @@ fun PreviewCharacterLayerDefault() {
         modifier = Modifier.padding(24.dp),
     ) {
         Text(
-            text = "레이어 합성 테스트",
-            fontSize = 14.sp,
+            text       = "레이어 합성 테스트",
+            fontSize   = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.DarkGray,
+            color      = Color.DarkGray,
         )
         Spacer(modifier = Modifier.height(12.dp))
         CharacterLayerPreview(size = 256.dp)

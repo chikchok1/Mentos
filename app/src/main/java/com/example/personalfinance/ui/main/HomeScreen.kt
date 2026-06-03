@@ -23,10 +23,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.personalfinance.data.CharacterAppearanceStore
 import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.navigation.Screen
-import com.example.personalfinance.ui.components.CharacterAvatar
-import com.example.personalfinance.ui.components.characterStateForCategory
+import com.example.personalfinance.ui.components.CharacterLayerPreview
 import com.example.personalfinance.ui.theme.*
 import java.time.YearMonth
 import java.time.LocalDateTime
@@ -59,11 +59,14 @@ fun HomeScreen(navController: NavController) {
         if (lastSum == 0L) null
         else ((thisSum - lastSum).toFloat() / lastSum * 100).toInt()
     }
-    val topCategory       = userStats.topCategory
-    val currentJob        = UserStatsCalculator.determineJob(userStats.categorySpending)
-    val avatarState       = characterStateForCategory(topCategory, happy = thisMonthSpending > 0)
-    val jobTitle          = UserStatsCalculator.jobTitle(currentJob)
-    val levelTitle        = UserStatsCalculator.levelTitle(currentLevel)
+    val topCategory  = userStats.topCategory
+    val currentJob   = UserStatsCalculator.determineJob(userStats.categorySpending)
+    val jobTitle     = UserStatsCalculator.jobTitle(currentJob)
+    val levelTitle   = UserStatsCalculator.levelTitle(currentLevel)
+
+    // ── 저장된 캐릭터 외형 ────────────────────────────────────────────────────
+    val appearanceStore = remember { CharacterAppearanceStore.getInstance(context) }
+    val characterAppearance by appearanceStore.appearanceFlow.collectAsState()
 
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
@@ -110,9 +113,10 @@ fun HomeScreen(navController: NavController) {
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    CharacterAvatar(
-                        state = avatarState,
-                        size  = 330.dp
+                    // ── CharacterAppearanceStore 에서 읽은 외형 적용 ──────────
+                    CharacterLayerPreview(
+                        layerState = characterAppearance,
+                        size       = 330.dp
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
