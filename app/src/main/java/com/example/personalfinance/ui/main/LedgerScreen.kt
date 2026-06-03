@@ -534,10 +534,12 @@ private fun DailySpendingChart(
                     else -> Gray400
                 }
 
+                // ── 클릭 영역을 Column 전체로 확장 ──────────────────────────
                 Column(
                     modifier = Modifier
                         .width(barWidth)
-                        .height(chartH + 22.dp),
+                        .height(chartH + 22.dp)
+                        .clickable { onDaySelected(data.day) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Bottom
                 ) {
@@ -568,7 +570,6 @@ private fun DailySpendingChart(
                                     color = if (isSelected) selectedColor else Color.Transparent,
                                     shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
                                 )
-                                .clickable { onDaySelected(data.day) }
                         )
                     }
 

@@ -145,6 +145,7 @@ fun MenuScreen(
             )
             listOf(
                 "결제 알림 테스트" to onNotificationDebugClick,
+                "🎨 캐릭터 레이어 테스트" to { navController.navigate(com.example.personalfinance.navigation.Screen.CharacterLayerTest.route) },
                 "알림 설정" to {},
                 "프로필 수정" to {},
                 "앱 정보" to {}

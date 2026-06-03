@@ -27,6 +27,7 @@ import com.example.personalfinance.ui.main.NotificationDebugScreen
 import com.example.personalfinance.ui.main.GachaScreen
 import com.example.personalfinance.ui.main.InventoryScreen
 import com.example.personalfinance.ui.auth.LoginScreen
+import com.example.personalfinance.ui.main.CharacterLayerTestScreen
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 sealed class Screen(val route: String) {
@@ -38,6 +39,7 @@ sealed class Screen(val route: String) {
     object Gacha     : Screen("gacha")
     object Inventory : Screen("inventory")
     object NotificationDebug : Screen("notification_debug")
+    object CharacterLayerTest : Screen("character_layer_test")
 }
 
 // ── Navigation Host ───────────────────────────────────────────────────────────
@@ -165,6 +167,7 @@ fun AppNavigation(tokenManager: TokenManager) {
         composable(Screen.NotificationDebug.route) { NotificationDebugScreen(navController) }
         composable(Screen.Gacha.route)             { GachaScreen(navController)             }
         composable(Screen.Inventory.route)         { InventoryScreen(navController)         }
+        composable(Screen.CharacterLayerTest.route)  { CharacterLayerTestScreen(navController)  }
     }
 }
 
