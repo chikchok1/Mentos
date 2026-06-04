@@ -89,7 +89,7 @@ fun MenuScreen(
             ) { Text("👤", fontSize = 28.sp) }
             Spacer(Modifier.width(16.dp))
             Column {
-                Text("사용자님", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold) // 실제 이름은 백엔드 연동 시 추가
+                Text("사용자님", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                 Text(
                     "Lv.$level $levelTitle · $jobTitle",
                     style    = MaterialTheme.typography.bodyMedium,
@@ -111,6 +111,7 @@ fun MenuScreen(
                         .background(Gray50)
                         .clickable {
                             when (item.id) {
+                                "shop"      -> navController.navigate(com.example.personalfinance.navigation.Screen.Shop.route)
                                 "gacha"     -> navController.navigate(com.example.personalfinance.navigation.Screen.Gacha.route)
                                 "inventory" -> navController.navigate(com.example.personalfinance.navigation.Screen.Inventory.route)
                             }
