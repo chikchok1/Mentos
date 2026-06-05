@@ -33,10 +33,10 @@ import java.time.LocalDateTime
 
 @Composable
 fun HomeScreen(navController: NavController) {
-    // ── State ────────────────────────────────────────────────────────────────
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { com.example.personalfinance.data.UserStatsStore.getInstance(context) }
     val userStats by store.statsFlow.collectAsState()
+    val nickname  by store.nicknameFlow.collectAsState()
 
     val currentLevel      = userStats.currentLevel
     val currentXP         = userStats.currentXP
@@ -64,7 +64,6 @@ fun HomeScreen(navController: NavController) {
     val jobTitle     = UserStatsCalculator.jobTitle(currentJob)
     val levelTitle   = UserStatsCalculator.levelTitle(currentLevel)
 
-    // ── 저장된 캐릭터 외형 ────────────────────────────────────────────────────
     val appearanceStore = remember { CharacterAppearanceStore.getInstance(context) }
     val characterAppearance by appearanceStore.appearanceFlow.collectAsState()
 
@@ -77,7 +76,6 @@ fun HomeScreen(navController: NavController) {
     }
     val navBarHeight = 88.dp + bottomInset
 
-    // ── Layout ───────────────────────────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
 
         Column(
@@ -96,13 +94,13 @@ fun HomeScreen(navController: NavController) {
                     color = Gray500
                 )
                 Text(
-                    text     = "안녕하세요 👋",
+                    text     = if (nickname.isBlank()) "안녕하세요 👋" else "${nickname}님, 안녕하세요 👋",
                     style    = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
 
-            // Character section (fade + scale in)
+            // Character section
             AnimatedVisibility(
                 visible = visible,
                 enter   = scaleIn(initialScale = 0.8f, animationSpec = tween(500)) + fadeIn(tween(500))
@@ -115,12 +113,11 @@ fun HomeScreen(navController: NavController) {
                 ) {
                     CharacterLayerPreview(
                         layerState = characterAppearance,
-                        size       = 200.dp  // ← 330→220
+                        size       = 220.dp
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Level badge + 직업명
                     Box(
                         modifier = Modifier
                             .background(
@@ -139,7 +136,6 @@ fun HomeScreen(navController: NavController) {
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // XP progress bar
                     LinearProgressIndicator(
                         progress   = { xpProgress },
                         modifier   = Modifier
@@ -161,7 +157,7 @@ fun HomeScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Spending card (slide up + fade in)
+            // Spending card
             AnimatedVisibility(
                 visible = visible,
                 enter   = slideInVertically(tween(500, 200)) { it / 3 } + fadeIn(tween(500, 200))
@@ -201,7 +197,6 @@ fun HomeScreen(navController: NavController) {
                             modifier   = Modifier.padding(top = 8.dp, bottom = 20.dp)
                         )
 
-                        // Insight row 1 — monthly change
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
                             val isDown = (lastMonthChange ?: 0) <= 0
                             Box(
@@ -230,7 +225,6 @@ fun HomeScreen(navController: NavController) {
                             }
                         }
 
-                        // Insight row 2 — top category
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier         = Modifier.size(36.dp).background(Color(0xFFFFF7ED), CircleShape),
@@ -247,7 +241,7 @@ fun HomeScreen(navController: NavController) {
             }
         }
 
-        // ── Bottom Navigation ─────────────────────────────────────────────────
+        // Bottom Navigation
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)

@@ -7,13 +7,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -48,12 +47,60 @@ fun MenuScreen(
     val context    = LocalContext.current
     val store      = remember { UserStatsStore.getInstance(context) }
     val userStats  by store.statsFlow.collectAsState()
+    val nickname   by store.nicknameFlow.collectAsState()
     val level      = userStats.currentLevel
     val xp         = userStats.currentXP
     val levelTitle = UserStatsCalculator.levelTitle(level)
     val currentJob = UserStatsCalculator.determineJob(userStats.categorySpending)
     val jobTitle   = UserStatsCalculator.jobTitle(currentJob)
     val itemCount  by store.transactionsFlow.collectAsState()
+
+    // ── 프로필 수정 다이얼로그 상태 ───────────────────────────────────────────
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editingName    by remember { mutableStateOf("") }
+
+    if (showEditDialog) {
+        val focusRequester = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("닉네임 변경", fontWeight = FontWeight.SemiBold) },
+            text = {
+                OutlinedTextField(
+                    value         = editingName,
+                    onValueChange = { if (it.length <= 12) editingName = it },
+                    placeholder   = { Text("닉네임을 입력하세요 (최대 12자)") },
+                    singleLine    = true,
+                    modifier      = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    shape  = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Blue500,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (editingName.isNotBlank()) {
+                            store.saveNickname(editingName)
+                        }
+                        showEditDialog = false
+                    }
+                ) {
+                    Text("저장", color = Blue500, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("취소", color = Gray500)
+                }
+            },
+            shape = RoundedCornerShape(20.dp),
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -89,7 +136,11 @@ fun MenuScreen(
             ) { Text("👤", fontSize = 28.sp) }
             Spacer(Modifier.width(16.dp))
             Column {
-                Text("사용자님", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text       = if (nickname.isBlank()) "사용자님" else "${nickname}님",
+                    style      = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Text(
                     "Lv.$level $levelTitle · $jobTitle",
                     style    = MaterialTheme.typography.bodyMedium,
@@ -148,7 +199,10 @@ fun MenuScreen(
                 "결제 알림 테스트" to onNotificationDebugClick,
                 "🎨 캐릭터 레이어 테스트" to { navController.navigate(com.example.personalfinance.navigation.Screen.CharacterLayerTest.route) },
                 "알림 설정" to {},
-                "프로필 수정" to {},
+                "프로필 수정" to {
+                    editingName    = nickname
+                    showEditDialog = true
+                },
                 "앱 정보" to {}
             ).forEach { (label, onClick) ->
                 Row(
@@ -166,7 +220,7 @@ fun MenuScreen(
                     Icon(Icons.Rounded.ChevronRight, null, tint = Gray400)
                 }
             }
-            
+
             // 로그아웃 버튼
             Row(
                 modifier = Modifier
