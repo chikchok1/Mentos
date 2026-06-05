@@ -35,6 +35,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.example.personalfinance.data.*
 import com.example.personalfinance.network.ApiClient
+import com.example.personalfinance.ui.main.animation.CapsuleOpeningAnimation
 import com.example.personalfinance.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -318,9 +319,10 @@ fun GachaScreen(navController: NavController) {
 
     // ── 가챠 결과 연출 ────────────────────────────────────────────────────────
     if (showResultDialog && gachaResult != null) {
-        CinematicGachaReveal(
+        CapsuleOpeningAnimation(
             result    = gachaResult!!,
-            onDismiss = { showResultDialog = false }
+            onDismiss = { showResultDialog = false },
+            durationMs = 2500
         )
     }
 
