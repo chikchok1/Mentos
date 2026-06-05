@@ -1,0 +1,56 @@
+--- app/src/main/java/com/example/personalfinance/ui/components/CharacterLayerPreview.kt
++++ app/src/main/java/com/example/personalfinance/ui/components/CharacterLayerPreview.kt
+@@ -131,14 +131,25 @@
+     val context = LocalContext.current
+ 
+     val layerPaths = remember(layerState) {
++        val grades = listOf("common", "rare", "unique", "legendary")
++        fun resolve(category: String, file: String): String {
++            for (g in grades) {
++                val path = "character_layers/$g/$category/$file"
++                if (context.assets.list("character_layers/$g/$category")?.contains(file) == true) {
++                    return path
++                }
++            }
++            return "character_layers/$category/$file" // fallback
++        }
++
+         listOfNotNull(
+             "character_layers/base/base_body.png",
+-            layerState.botClothes?.let  { "character_layers/clothes/$it"     },
+-            layerState.topClothes?.let  { "character_layers/clothes/$it"     },
+-            layerState.hair?.let        { "character_layers/hairs/$it"       },
+-            layerState.hat?.let         { "character_layers/hats/$it"        },
+-            layerState.face?.let        { "character_layers/faces/$it"       },
+-            layerState.accessory?.let   { "character_layers/accessories/$it" },
++            layerState.botClothes?.let  { resolve("clothes", it) },
++            layerState.topClothes?.let  { resolve("clothes", it) },
++            layerState.hair?.let        { resolve("hairs", it) },
++            layerState.hat?.let         { resolve("hats", it) },
++            layerState.face?.let        { resolve("faces", it) },
++            layerState.accessory?.let   { resolve("accessories", it) },
+         )
+     }
+ 
+@@ -176,10 +187,19 @@
+     val context = LocalContext.current
+ 
+     val layerPaths = remember(facePath, extraLayers) {
++        val grades = listOf("common", "rare", "unique", "legendary")
++        fun resolve(path: String): String {
++            val parts = path.split("/")
++            if (parts.size != 2) return "character_layers/$path"
++            val (cat, file) = parts
++            for (g in grades) {
++                if (context.assets.list("character_layers/$g/$cat")?.contains(file) == true) return "character_layers/$g/$cat/$file"
++            }
++            return "character_layers/$path"
++        }
+         buildList {
+             add("character_layers/base/base_body.png")
+-            add("character_layers/$facePath")
+-            extraLayers.forEach { add("character_layers/$it") }
++            add(resolve(facePath))
++            extraLayers.forEach { add(resolve(it)) }
+         }
+     }
