@@ -1,0 +1,88 @@
+--- app/src/main/java/com/example/personalfinance/ui/main/ShopScreen.kt
++++ app/src/main/java/com/example/personalfinance/ui/main/ShopScreen.kt
+@@ -43,6 +43,7 @@
+ private data class ShopItem(
+-    val folder: String,
++    val grade: String,
++    val categoryFolder: String,
+     val filename: String,
+     val displayName: String,
+     val price: Int,
+     val category: ShopTab,
+ ) {
++    val folder: String get() = "$grade/$categoryFolder"
++}
+ 
+@@ -62,10 +63,22 @@
+ 
+-private fun listAssets(context: android.content.Context, folder: String): List<String> =
+-    runCatching {
+-        context.assets.list("character_layers/$folder")
+-            ?.filter { it.endsWith(".png") }
+-            ?.sorted()
+-            ?: emptyList()
+-    }.getOrDefault(emptyList())
++private fun listAssets(context: android.content.Context, categoryFolder: String): List<Pair<String, String>> {
++    val grades = listOf("common", "rare", "unique", "legendary")
++    val result = mutableListOf<Pair<String, String>>()
++    for (g in grades) {
++        val items = runCatching {
++            context.assets.list("character_layers/$g/$categoryFolder")
++                ?.filter { it.endsWith(".png") }
++                ?.sorted()
++                ?: emptyList()
++        }.getOrDefault(emptyList())
++        for (item in items) {
++            result.add(g to item)
++        }
++    }
++    return result
++}
+ 
+@@ -115,10 +128,10 @@
+     val allItems: Map<ShopTab, List<ShopItem>> = remember {
+-        fun build(folder: String, tab: ShopTab) =
+-            listAssets(context, folder).map { file ->
+-                ShopItem(folder, file, assetDisplayName(file), shopStore.priceOf(file), tab)
++        fun build(categoryFolder: String, tab: ShopTab) =
++            listAssets(context, categoryFolder).map { (grade, file) ->
++                ShopItem(grade, categoryFolder, file, assetDisplayName(file), shopStore.priceOf(file), tab)
+             }
+ 
+         val hairItems = build("hairs",       ShopTab.HAIR)
+         val hatItems  = build("hats",        ShopTab.HAT)
+         val topItems  = build("clothes",     ShopTab.TOP).filter { it.filename.startsWith("top") }
+         val botItems  = build("clothes",     ShopTab.BOT).filter { it.filename.startsWith("bot") }
+@@ -414,6 +427,24 @@
+                 else -> {
+                     Row(verticalAlignment = Alignment.CenterVertically) {
+                         if (isNew) {
+                             Text(
+                                 "NEW",
+                                 fontSize = 8.sp,
+                                 color    = Color(0xFF993C1D),
+                                 modifier = Modifier
+                                     .background(Color(0xFFFAECE7), RoundedCornerShape(6.dp))
+                                     .padding(horizontal = 4.dp, vertical = 2.dp)
+                             )
+                             Spacer(Modifier.width(3.dp))
+                         }
++                        val gradeColor = when (item.grade) {
++                            "legendary" -> Color(0xFFE65100)
++                            "unique"    -> Color(0xFF7B1FA2)
++                            "rare"      -> Color(0xFF1976D2)
++                            else        -> Color(0xFF9E9E9E)
++                        }
++                        Text(
++                            item.grade.take(1).uppercase(),
++                            fontSize = 8.sp,
++                            fontWeight = FontWeight.Bold,
++                            color = Color.White,
++                            modifier = Modifier
++                                .background(gradeColor, RoundedCornerShape(4.dp))
++                                .padding(horizontal = 4.dp, vertical = 2.dp)
++                        )
++                        Spacer(Modifier.width(3.dp))
+                         Text("🪙 ${item.price}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF534AB7))
+                     }
+                 }
