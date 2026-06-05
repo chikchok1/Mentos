@@ -41,6 +41,23 @@ class TransactionController(
         }
     }
 
+    // ── 전체 목록 조회 ────────────────────────────────────────────────────────
+
+    /** GET /api/transactions/all */
+    @GetMapping("/all")
+    fun getAll(
+        @RequestHeader("Authorization") authHeader: String?
+    ): ResponseEntity<Any> {
+        val userId = resolveUserId(authHeader)
+            ?: return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
+
+        return try {
+            ResponseEntity.ok(transactionService.getAll(userId))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "조회 중 오류가 발생했습니다.")))
+        }
+    }
+
     // ── 월별 목록 조회 ────────────────────────────────────────────────────────
 
     /** GET /api/transactions?year=2025&month=5 */

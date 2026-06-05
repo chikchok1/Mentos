@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.TrendingDown
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,19 +23,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.personalfinance.data.CharacterAppearanceStore
 import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.navigation.Screen
-import com.example.personalfinance.ui.components.PixelCharacter
+import com.example.personalfinance.ui.components.CharacterLayerPreview
 import com.example.personalfinance.ui.theme.*
 import java.time.YearMonth
 import java.time.LocalDateTime
 
 @Composable
 fun HomeScreen(navController: NavController) {
-    // ── State ────────────────────────────────────────────────────────────────
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { com.example.personalfinance.data.UserStatsStore.getInstance(context) }
     val userStats by store.statsFlow.collectAsState()
+    val nickname  by store.nicknameFlow.collectAsState()
 
     val currentLevel      = userStats.currentLevel
     val currentXP         = userStats.currentXP
@@ -39,7 +44,6 @@ fun HomeScreen(navController: NavController) {
     val (xpInLevel, xpToNext) = UserStatsCalculator.levelProgressXP(currentXP)
     val thisMonthSpending = userStats.thisMonthSpending
     val storedTransactions by store.transactionsFlow.collectAsState()
-    // [FIX #4] 지난달 대비 변화율을 실제 거래 데이터에서 계산
     val lastMonthChange: Int? = remember(storedTransactions) {
         val now = YearMonth.now()
         val lastMonth = now.minusMonths(1)
@@ -52,29 +56,28 @@ fun HomeScreen(navController: NavController) {
             .sumOf { it.amount }
         val thisSum  = sumForMonth(now)
         val lastSum  = sumForMonth(lastMonth)
-        if (lastSum == 0L) null   // 지난달 데이터 없으면 null
+        if (lastSum == 0L) null
         else ((thisSum - lastSum).toFloat() / lastSum * 100).toInt()
     }
-    val topCategory       = userStats.topCategory
-    val currentJob        = UserStatsCalculator.determineJob(userStats.categorySpending)
-    val jobTitle          = UserStatsCalculator.jobTitle(currentJob)
-    val levelTitle        = UserStatsCalculator.levelTitle(currentLevel)
+    val topCategory  = userStats.topCategory
+    val currentJob   = UserStatsCalculator.determineJob(userStats.categorySpending)
+    val jobTitle     = UserStatsCalculator.jobTitle(currentJob)
+    val levelTitle   = UserStatsCalculator.levelTitle(currentLevel)
+
+    val appearanceStore = remember { CharacterAppearanceStore.getInstance(context) }
+    val characterAppearance by appearanceStore.appearanceFlow.collectAsState()
 
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
 
-    // 시스템 바 inset
     val systemBarsInsets = WindowInsets.systemBars
     val bottomInset = with(androidx.compose.ui.platform.LocalDensity.current) {
         systemBarsInsets.getBottom(this).toDp()
     }
-    // 바텀 네비 바 전체 높이 = 콘텐츠(16+56+16) + 시스템 inset
     val navBarHeight = 88.dp + bottomInset
 
-    // ── Layout ───────────────────────────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // Scrollable content
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -91,13 +94,13 @@ fun HomeScreen(navController: NavController) {
                     color = Gray500
                 )
                 Text(
-                    text     = "안녕하세요 👋",
+                    text     = if (nickname.isBlank()) "안녕하세요 👋" else "${nickname}님, 안녕하세요 👋",
                     style    = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
 
-            // Character section (fade + scale in)
+            // Character section
             AnimatedVisibility(
                 visible = visible,
                 enter   = scaleIn(initialScale = 0.8f, animationSpec = tween(500)) + fadeIn(tween(500))
@@ -108,11 +111,13 @@ fun HomeScreen(navController: NavController) {
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    PixelCharacter(level = currentLevel, job = currentJob)
+                    CharacterLayerPreview(
+                        layerState = characterAppearance,
+                        size       = 220.dp
+                    )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Level badge + 직업명
                     Box(
                         modifier = Modifier
                             .background(
@@ -131,7 +136,6 @@ fun HomeScreen(navController: NavController) {
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // XP progress bar
                     LinearProgressIndicator(
                         progress   = { xpProgress },
                         modifier   = Modifier
@@ -153,7 +157,7 @@ fun HomeScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Spending card (slide up + fade in) — 탭하면 가계부로 이동
+            // Spending card
             AnimatedVisibility(
                 visible = visible,
                 enter   = slideInVertically(tween(500, 200)) { it / 3 } + fadeIn(tween(500, 200))
@@ -180,7 +184,7 @@ fun HomeScreen(navController: NavController) {
                                 color = Gray600
                             )
                             Icon(
-                                imageVector        = Icons.Rounded.KeyboardArrowRight,
+                                imageVector        = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                                 contentDescription = null,
                                 tint               = Gray400,
                                 modifier           = Modifier.size(20.dp)
@@ -193,7 +197,6 @@ fun HomeScreen(navController: NavController) {
                             modifier   = Modifier.padding(top = 8.dp, bottom = 20.dp)
                         )
 
-                        // Insight row 1 — monthly change
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
                             val isDown = (lastMonthChange ?: 0) <= 0
                             Box(
@@ -202,7 +205,7 @@ fun HomeScreen(navController: NavController) {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    if (isDown) Icons.Rounded.TrendingDown else Icons.Rounded.TrendingUp,
+                                    if (isDown) Icons.AutoMirrored.Rounded.TrendingDown else Icons.AutoMirrored.Rounded.TrendingUp,
                                     null,
                                     tint     = if (isDown) GreenSuccess else RedDanger,
                                     modifier = Modifier.size(18.dp)
@@ -222,7 +225,6 @@ fun HomeScreen(navController: NavController) {
                             }
                         }
 
-                        // Insight row 2 — top category
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier         = Modifier.size(36.dp).background(Color(0xFFFFF7ED), CircleShape),
@@ -239,14 +241,13 @@ fun HomeScreen(navController: NavController) {
             }
         }
 
-        // ── Bottom Navigation ─────────────────────────────────────────────────
+        // Bottom Navigation
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .shadow(12.dp)
                 .background(Color.White)
-                // 콘텐츠 패딩은 위쪽만, 하단은 시스템 inset만큼 추가
                 .padding(start = 32.dp, end = 32.dp, top = 16.dp, bottom = 16.dp + bottomInset)
         ) {
             Row(
@@ -254,12 +255,9 @@ fun HomeScreen(navController: NavController) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
-                // Ledger
                 IconButton(onClick = { navController.navigate(Screen.Ledger.route) }) {
-                    Icon(Icons.Rounded.MenuBook, contentDescription = "가계부", tint = Gray600)
+                    Icon(Icons.AutoMirrored.Rounded.MenuBook, contentDescription = "가계부", tint = Gray600)
                 }
-
-                // FAB — add expense
                 Box(
                     modifier = Modifier
                         .size(56.dp)
@@ -274,8 +272,6 @@ fun HomeScreen(navController: NavController) {
                 ) {
                     Icon(Icons.Rounded.Add, contentDescription = "추가", tint = Color.White, modifier = Modifier.size(28.dp))
                 }
-
-                // Menu
                 IconButton(onClick = { navController.navigate(Screen.Menu.route) }) {
                     Icon(Icons.Rounded.Menu, contentDescription = "메뉴", tint = Gray600)
                 }

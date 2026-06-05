@@ -162,7 +162,6 @@ class UserStatsStore private constructor(context: Context) {
     private val prefs: SharedPreferences =
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    // 서버 동기화용 코루틴 스코프 (앱 생명주기와 무관하게 유지)
     private val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val _statsFlow = MutableStateFlow(loadStats())
@@ -170,6 +169,89 @@ class UserStatsStore private constructor(context: Context) {
 
     private val _transactionsFlow = MutableStateFlow(loadTransactions())
     val transactionsFlow: StateFlow<List<Transaction>> = _transactionsFlow.asStateFlow()
+
+    // ── 닉네임 ────────────────────────────────────────────────────────────────
+    private val _nicknameFlow = MutableStateFlow(prefs.getString(KEY_NICKNAME, "") ?: "")
+    val nicknameFlow: StateFlow<String> = _nicknameFlow.asStateFlow()
+
+    fun saveNickname(name: String) {
+        prefs.edit().putString(KEY_NICKNAME, name.trim()).apply()
+        _nicknameFlow.value = name.trim()
+    }
+
+    // ── 로그인 후 서버 데이터 복원 ────────────────────────────────────────────
+    /**
+     * 로그인 직후 호출 (suspend). 완료될 때까지 기다린 뒤 화면 전환해야 함.
+     * 서버에서 전체 거래 내역을 받아 로컬 SharedPreferences와 StateFlow를 갱신한다.
+     */
+    suspend fun restoreFromServer() {
+        try {
+            val tokenManager = TokenManager(appContext)
+            val api = ApiClient.getTransactionApi(appContext, tokenManager)
+
+            val resp = api.getAll()
+            if (!resp.isSuccessful) {
+                Log.w(TAG, "서버 복원 실패 (HTTP ${resp.code()})")
+                return
+            }
+
+            val serverTxs = resp.body().orEmpty()
+            if (serverTxs.isEmpty()) {
+                Log.i(TAG, "서버 복원: 데이터 없음")
+                return
+            }
+
+            // TransactionResponse → 로컬 Transaction 변환
+            val restored = serverTxs.map { r ->
+                val displayDate = runCatching {
+                    LocalDateTime.parse(r.occurredAt)
+                        .format(transactionDisplayFormatter)
+                }.getOrDefault(r.occurredAt)
+
+                Transaction(
+                    store      = r.merchantName,
+                    date       = displayDate,
+                    amount     = r.amount,
+                    category   = r.category,
+                    status     = TransactionStatus.APPROVED_RECORDED,
+                    source     = r.source,
+                    occurredAt = r.occurredAt,
+                    id         = r.occurredAt + "|" + r.amount + "|" + r.merchantName
+                )
+            }.sortedByDescending { it.occurredAt }
+
+            // XP 재계산: 전체 거래 합산
+            val totalXP = restored.sumOf { tx ->
+                UserStatsCalculator.calculateEarnedXP(tx.amount).toLong()
+            }.toInt()
+
+            val now = YearMonth.now()
+            val thisMonthTxs = restored.filter { tx ->
+                runCatching {
+                    YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate()) == now
+                }.getOrDefault(false)
+            }
+            val spending = thisMonthTxs.sumOf { it.amount }
+            val categorySpending = ExpenseCategoryClassifier.categories.associateWith { cat ->
+                thisMonthTxs.filter { it.category == cat }.sumOf { it.amount }
+            }
+
+            val newStats = UserStats(
+                currentLevel      = UserStatsCalculator.calculateLevel(totalXP),
+                currentXP         = totalXP,
+                nextLevelXP       = UserStatsCalculator.nextLevelThreshold(totalXP),
+                thisMonthSpending = spending,
+                categorySpending  = categorySpending,
+                transactions      = restored
+            )
+
+            saveStats(newStats, restored)
+            Log.i(TAG, "서버 복원 완료: ${restored.size}건")
+
+        } catch (e: Exception) {
+            Log.w(TAG, "서버 복원 실패 (오프라인?): ${e.message}")
+        }
+    }
 
     private fun loadStats(): UserStats {
         val totalXP = if (prefs.contains(KEY_TOTAL_XP)) {
@@ -275,8 +357,6 @@ class UserStatsStore private constructor(context: Context) {
 
         saveStats(newStats, newTransactions)
 
-        // ── 서버 동기화 (fire-and-forget) ──────────────────────────────────────
-        // 로컬 저장 완료 후 백그라운드로 서버에 전송. 실패해도 앱 동작에 영향 없음.
         syncScope.launch {
             try {
                 val tokenManager = TokenManager(appContext)
@@ -342,7 +422,6 @@ class UserStatsStore private constructor(context: Context) {
 
         saveStats(newStats, newTransactions)
 
-        // ── 서버 동기화 (fire-and-forget) ──────────────────────────────────────
         syncScope.launch {
             syncCategoryUpdateWithRetry(transactionId, normalizedCategory)
         }
@@ -354,6 +433,7 @@ class UserStatsStore private constructor(context: Context) {
         prefs.edit().clear().apply()
         _transactionsFlow.value = emptyList()
         _statsFlow.value = UserStats()
+        _nicknameFlow.value = ""
     }
 
     private fun loadTransactions(): List<Transaction> =
@@ -405,7 +485,6 @@ class UserStatsStore private constructor(context: Context) {
                     Log.d(TAG, "카테고리 서버 동기화 완료: clientId=$transactionId")
                     return
                 }
-
                 Log.w(
                     TAG,
                     "카테고리 서버 동기화 실패 attempt=${attempt + 1} " +
@@ -420,7 +499,6 @@ class UserStatsStore private constructor(context: Context) {
             }
         }
 
-        // TODO: 앱 재시작 후에도 재시도할 수 있도록 pending sync 큐를 영속화한다.
         Log.w(TAG, "카테고리 서버 동기화 재시도 보류 필요: clientId=$transactionId")
     }
 
@@ -434,6 +512,7 @@ class UserStatsStore private constructor(context: Context) {
         private const val KEY_SPENDING = "key_spending"
         private const val KEY_CATEGORY_SPENDING_PREFIX = "key_category_spending_"
         private const val KEY_TRANSACTIONS = "key_transactions"
+        private const val KEY_NICKNAME = "key_nickname"
         private val transactionDisplayFormatter = DateTimeFormatter.ofPattern("MM/dd HH:mm")
 
         @Volatile

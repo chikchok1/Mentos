@@ -25,7 +25,7 @@ interface TransactionRepository : JpaRepository<Transaction, Long> {
     /** userId + clientTransactionId로 단건 조회 */
     fun findByUserIdAndClientTransactionId(userId: Long, clientTransactionId: String): Optional<Transaction>
 
-    /** 월별 카테고리별 합계 — (category, sum) 쌍으로 반환 */
+    /** 월별 카테고리별 합계 */
     @Query("""
         SELECT t.category, SUM(t.amount)
         FROM Transaction t
@@ -40,7 +40,7 @@ interface TransactionRepository : JpaRepository<Transaction, Long> {
         @Param("end")    end: LocalDateTime
     ): List<Array<Any>>
 
-    /** 월별 일자별 합계 — (day, sum) 쌍으로 반환 */
+    /** 월별 일자별 합계 */
     @Query("""
         SELECT DAY(t.occurredAt), SUM(t.amount)
         FROM Transaction t
@@ -56,7 +56,7 @@ interface TransactionRepository : JpaRepository<Transaction, Long> {
         @Param("end")    end: LocalDateTime
     ): List<Array<Any>>
 
-    /** 최근 N개월 월별 합계 — (year, month, sum) */
+    /** 최근 N개월 월별 합계 */
     @Query("""
         SELECT YEAR(t.occurredAt), MONTH(t.occurredAt), SUM(t.amount)
         FROM Transaction t

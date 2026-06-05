@@ -34,11 +34,6 @@ data class TransactionResponse(
     val createdAt: String
 )
 
-/**
- * GET /api/transactions/stats 응답
- * dailyBreakdown: key = 일(1~31), value = 해당 일 지출 합계
- * categoryBreakdown: key = 카테고리명, value = 해당 카테고리 지출 합계
- */
 data class MonthlyStatsResponse(
     val year: Int,
     val month: Int,
@@ -51,25 +46,33 @@ data class MonthlyStatsResponse(
 
 interface TransactionApi {
 
-    /** 거래 저장 (카드 알림 자동 / 수동 입력 모두) */
+    /** 거래 저장 */
     @POST("api/transactions")
     suspend fun save(
         @Body req: SaveTransactionRequest
     ): Response<TransactionResponse>
 
+    /** 전체 거래 목록 조회 (로그인 복원용) */
+    @GET("api/transactions/all")
+    suspend fun getAll(): Response<List<TransactionResponse>>
+
     /**
-     * 카테고리 수정 — clientTransactionId 기준
-     * 앱에서 서버 DB id를 알 수 없으므로 이 방식 사용
+     * 월별 거래 목록 조회
+     * GET /api/transactions?year=2026&month=6
      */
+    @GET("api/transactions")
+    suspend fun getByMonth(
+        @Query("year")  year: Int,
+        @Query("month") month: Int
+    ): Response<List<TransactionResponse>>
+
+    /** 카테고리 수정 — clientTransactionId 기준 */
     @PATCH("api/transactions/by-client/category")
     suspend fun updateCategoryByClientId(
         @Body req: UpdateCategoryByClientIdRequest
     ): Response<TransactionResponse>
 
-    /**
-     * 월별 통계 (카테고리별 합계 + 일자별 합계)
-     * GET /api/transactions/stats?year=2026&month=5
-     */
+    /** 월별 통계 */
     @GET("api/transactions/stats")
     suspend fun getStats(
         @Query("year")  year: Int,

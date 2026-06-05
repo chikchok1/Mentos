@@ -12,9 +12,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.example.personalfinance.data.TokenManager
 import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.network.ApiClient
@@ -26,7 +29,9 @@ import com.example.personalfinance.ui.main.NewRecordScreen
 import com.example.personalfinance.ui.main.NotificationDebugScreen
 import com.example.personalfinance.ui.main.GachaScreen
 import com.example.personalfinance.ui.main.InventoryScreen
+import com.example.personalfinance.ui.main.ShopScreen
 import com.example.personalfinance.ui.auth.LoginScreen
+import com.example.personalfinance.ui.main.CharacterLayerTestScreen
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 sealed class Screen(val route: String) {
@@ -37,7 +42,9 @@ sealed class Screen(val route: String) {
     object Menu      : Screen("menu")
     object Gacha     : Screen("gacha")
     object Inventory : Screen("inventory")
+    object Shop      : Screen("shop")
     object NotificationDebug : Screen("notification_debug")
+    object CharacterLayerTest : Screen("character_layer_test")
 }
 
 // ── Navigation Host ───────────────────────────────────────────────────────────
@@ -46,15 +53,21 @@ sealed class Screen(val route: String) {
 fun AppNavigation(tokenManager: TokenManager) {
     val navController = rememberNavController()
     var startDestination by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         val token = tokenManager.getAccessToken()
         startDestination = if (token != null) Screen.Home.route else Screen.Login.route
         Log.i(TAG, "App start auth state: hasAccessToken=${token != null}, startDestination=$startDestination")
+        if (token != null) {
+            // 앱 재시작 시(토큰 있음) 서버에서 거래 내역 복원
+            withContext(Dispatchers.IO) {
+                UserStatsStore.getInstance(context).restoreFromServer()
+            }
+        }
     }
 
     if (startDestination == null) {
-        // Token 검증 중일 때 보여줄 스플래시 화면 또는 빈 화면
         Box(modifier = Modifier.fillMaxSize())
         return
     }
@@ -84,8 +97,8 @@ fun AppNavigation(tokenManager: TokenManager) {
                                         Log.i(TAG, "Backend social-login succeeded provider=KAKAO")
                                         val authData = response.body()!!
                                         tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
-                                        // JWT sub(userId) 추출 후 명시적으로 저장
                                         extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
+                                        UserStatsStore.getInstance(context).restoreFromServer()
                                         navController.navigate(Screen.Home.route) {
                                             popUpTo(Screen.Login.route) { inclusive = true }
                                         }
@@ -119,8 +132,8 @@ fun AppNavigation(tokenManager: TokenManager) {
                                             Log.i(TAG, "Backend social-login succeeded provider=GOOGLE")
                                             val authData = response.body()!!
                                             tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
-                                            // JWT sub(userId) 추출 후 명시적으로 저장
                                             extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
+                                            UserStatsStore.getInstance(context).restoreFromServer()
                                             navController.navigate(Screen.Home.route) {
                                                 popUpTo(Screen.Login.route) { inclusive = true }
                                             }
@@ -157,7 +170,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                     tokenManager.clearTokens()
                     ApiClient.reset()
                     navController.navigate(Screen.Login.route) {
-                        popUpTo(0) { inclusive = true } // 모든 백스택을 지우고 로그인 화면으로
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )      
@@ -165,20 +178,17 @@ fun AppNavigation(tokenManager: TokenManager) {
         composable(Screen.NotificationDebug.route) { NotificationDebugScreen(navController) }
         composable(Screen.Gacha.route)             { GachaScreen(navController)             }
         composable(Screen.Inventory.route)         { InventoryScreen(navController)         }
+        composable(Screen.Shop.route)              { ShopScreen(navController)              }
+        composable(Screen.CharacterLayerTest.route)  { CharacterLayerTestScreen(navController)  }
     }
 }
 
 // ── JWT Payload에서 sub(userId) 추출 ─────────────────────────────────────────
 
-/**
- * JWT AccessToken의 payload를 Base64url 디코딩해 sub 필드를 반환.
- * 파싱 실패 시 null 반환.
- */
 fun extractUserIdFromJwt(token: String): String? {
     return try {
         val parts = token.split(".")
         if (parts.size < 2) return null
-        // JWT payload는 Base64url(패딩 없음) → 패딩 추가 후 디코딩
         val payload = parts[1].let { it + "=".repeat((4 - it.length % 4) % 4) }
         val json = JSONObject(String(Base64.decode(payload, Base64.URL_SAFE), Charsets.UTF_8))
         json.optString("sub").takeIf { it.isNotBlank() }
