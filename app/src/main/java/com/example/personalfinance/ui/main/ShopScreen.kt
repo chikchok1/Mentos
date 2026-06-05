@@ -253,13 +253,13 @@ fun ShopScreen(navController: NavController) {
                             radius = 600f,
                         )
                     )
-                    .padding(vertical = 20.dp),
+                    .padding(vertical = 32.dp),  // ← 20→32 (패널 세로 여유 확보)
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CharacterLayerPreview(
                         layerState = previewState,
-                        size       = 120.dp,
+                        size       = 200.dp,  // ← 120→200 (캐릭터 크기 확대)
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
