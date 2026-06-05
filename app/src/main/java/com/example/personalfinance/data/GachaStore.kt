@@ -35,6 +35,26 @@ class GachaStore(context: Context) {
     private fun getOwnedItemsKey() = "${userId()}_owned_item_ids"
     private fun getCoinKey()       = "${userId()}_gacha_coins"
 
+    // ── 코인 ─────────────────────────────────────────────────────────────────
+
+    /** 현재 보유 코인 수 반환 */
+    fun getCoins(): Int = prefs.getInt(getCoinKey(), 0)
+
+    /** 코인 추가 (음수 불가) */
+    fun addCoins(amount: Int) {
+        if (amount <= 0) return
+        val newCoins = getCoins() + amount
+        prefs.edit().putInt(getCoinKey(), newCoins).apply()
+    }
+
+    /** 코인 차감. 잔액이 부족하면 false 반환 */
+    fun deductCoins(amount: Int): Boolean {
+        val current = getCoins()
+        if (current < amount) return false
+        prefs.edit().putInt(getCoinKey(), current - amount).apply()
+        return true
+    }
+
     // ── 남은 시간 유틸 ────────────────────────────────────────────────────────
 
     /**
