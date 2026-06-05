@@ -113,10 +113,9 @@ fun HomeScreen(navController: NavController) {
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    // ── CharacterAppearanceStore 에서 읽은 외형 적용 ──────────
                     CharacterLayerPreview(
                         layerState = characterAppearance,
-                        size       = 330.dp
+                        size       = 200.dp  // ← 330→220
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))

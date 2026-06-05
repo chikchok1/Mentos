@@ -107,13 +107,11 @@ fun ShopScreen(navController: NavController) {
     var selectedTab  by remember { mutableStateOf(ShopTab.NEW) }
     var selectedItem by remember { mutableStateOf<ShopItem?>(null) }
 
-    // 미리보기: 현재 장착 상태 + 선택 아이템 레이어만 오버레이
     val previewState: CharacterLayerState = remember(equipped, selectedItem) {
         val item = selectedItem ?: return@remember equipped
         equipped.withItem(item)
     }
 
-    // ── 아이템 목록 빌드 ──────────────────────────────────────────────────────
     val allItems: Map<ShopTab, List<ShopItem>> = remember {
         fun build(folder: String, tab: ShopTab) =
             listAssets(context, folder).map { file ->
@@ -140,7 +138,6 @@ fun ShopScreen(navController: NavController) {
 
     val currentItems = allItems[selectedTab] ?: emptyList()
 
-    // ── 구매 핸들러 ───────────────────────────────────────────────────────────
     fun handleBuy(item: ShopItem) {
         if (ownedItems.contains("${item.folder}/${item.filename}")) return
         val success = shopStore.spendCoins(item.price)
@@ -153,13 +150,11 @@ fun ShopScreen(navController: NavController) {
         }
     }
 
-    // ── 장착 핸들러 ───────────────────────────────────────────────────────────
     fun handleEquip(item: ShopItem) {
         appearanceStore.save(equipped.withItem(item))
         coroutine.launch { snackbar.showSnackbar("${item.displayName} 장착 완료!") }
     }
 
-    // ── UI ───────────────────────────────────────────────────────────────────
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         topBar = {
@@ -241,7 +236,7 @@ fun ShopScreen(navController: NavController) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // ── 미리보기 패널 (장착 상태 누적) ───────────────────────────────
+            // ── 미리보기 패널 ─────────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -253,13 +248,13 @@ fun ShopScreen(navController: NavController) {
                             radius = 600f,
                         )
                     )
-                    .padding(vertical = 32.dp),  // ← 20→32 (패널 세로 여유 확보)
+                    .padding(vertical = 24.dp),  // ← 32→24
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CharacterLayerPreview(
                         layerState = previewState,
-                        size       = 200.dp,  // ← 120→200 (캐릭터 크기 확대)
+                        size       = 160.dp,  // ← 200→160
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -272,7 +267,7 @@ fun ShopScreen(navController: NavController) {
                 }
             }
 
-            // ── 아이템 그리드 (기본 캐릭터 + 해당 아이템만) ──────────────────
+            // ── 아이템 그리드 ─────────────────────────────────────────────────
             LazyVerticalGrid(
                 columns               = GridCells.Fixed(3),
                 modifier              = Modifier
@@ -295,7 +290,6 @@ fun ShopScreen(navController: NavController) {
                         ShopTab.NEW  -> false
                     }
 
-                    // ★ 썸네일: 기본 캐릭터 + 이 아이템만 (equipped 무관)
                     val thumbState = remember(item) { item.toThumbState() }
 
                     ShopItemCard(
