@@ -32,6 +32,7 @@ import com.example.personalfinance.ui.main.InventoryScreen
 import com.example.personalfinance.ui.main.ShopScreen
 import com.example.personalfinance.ui.auth.LoginScreen
 import com.example.personalfinance.ui.main.CharacterLayerTestScreen
+import com.example.personalfinance.ui.main.GachaDebugScreen
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 sealed class Screen(val route: String) {
@@ -45,6 +46,7 @@ sealed class Screen(val route: String) {
     object Shop      : Screen("shop")
     object NotificationDebug : Screen("notification_debug")
     object CharacterLayerTest : Screen("character_layer_test")
+    object GachaDebug : Screen("gacha_debug")
 }
 
 // ── Navigation Host ───────────────────────────────────────────────────────────
@@ -180,6 +182,7 @@ fun AppNavigation(tokenManager: TokenManager) {
         composable(Screen.Inventory.route)         { InventoryScreen(navController)         }
         composable(Screen.Shop.route)              { ShopScreen(navController)              }
         composable(Screen.CharacterLayerTest.route)  { CharacterLayerTestScreen(navController)  }
+        composable(Screen.GachaDebug.route)           { GachaDebugScreen(navController)           }
     }
 }
 

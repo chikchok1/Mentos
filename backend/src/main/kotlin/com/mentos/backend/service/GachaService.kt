@@ -122,4 +122,16 @@ class GachaService(
             "totalCoins" to user.coins
         )
     }
+    @Transactional
+    fun addCoinsForTest(userId: Long, amount: Int): Map<String, Any> {
+        require(amount > 0) { "지급 코인은 1 이상이어야 합니다." }
+        val user = userRepository.findById(userId).orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
+        user.coins += amount
+        userRepository.save(user)
+        return mapOf(
+            "success"    to true,
+            "addedCoins" to amount,
+            "totalCoins" to user.coins
+        )
+    }
 }

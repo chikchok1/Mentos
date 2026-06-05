@@ -833,71 +833,75 @@ private fun CinematicGachaReveal(
                     }
 
                     // ──────────────────────────────────────────────────
-                    // Lid (상반구) – lidProgress 0→1 로 위로 이동
+                    // Lid (상반구) – lidProgress 0→1 로 위로 이동 + 페이드 아웃
                     // ──────────────────────────────────────────────────
                     val lidCy = cy - lidProgress * (size.height + cr)
+                    // 초반엔 불투명 유지, 후반부에 빠르게 사라지는 EaseIn 곡선
+                    val lidAlpha = (1f - (lidProgress * 1.4f).coerceIn(0f, 1f).let { it * it }).coerceIn(0f, 1f)
 
-                    clipRect(left = cx - cr, top = lidCy - cr, right = cx + cr, bottom = lidCy) {
-                        // 1) 베이스 색상
-                        drawCircle(color = lidColor, radius = cr, center = Offset(cx, lidCy))
+                    if (lidAlpha > 0f) {
+                        clipRect(left = cx - cr, top = lidCy - cr, right = cx + cr, bottom = lidCy) {
+                            // 1) 베이스 색상
+                            drawCircle(color = lidColor.copy(alpha = lidAlpha), radius = cr, center = Offset(cx, lidCy))
 
-                        // 2) 측면 어둠
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.38f),
+                            // 2) 측면 어둠
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.38f * lidAlpha),
+                                    ),
+                                    center = Offset(cx, lidCy),
+                                    radius = cr,
                                 ),
-                                center = Offset(cx, lidCy),
                                 radius = cr,
-                            ),
-                            radius = cr,
-                            center = Offset(cx, lidCy),
-                        )
+                                center = Offset(cx, lidCy),
+                            )
 
-                        // 3) 주 하이라이트 – 왼쪽 위 (광원이 좌상단)
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.75f),
-                                    Color.White.copy(alpha = 0.25f),
-                                    Color.Transparent,
+                            // 3) 주 하이라이트 – 왼쪽 위 (광원이 좌상단)
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.75f * lidAlpha),
+                                        Color.White.copy(alpha = 0.25f * lidAlpha),
+                                        Color.Transparent,
+                                    ),
+                                    center = Offset(cx - cr * 0.28f, lidCy - cr * 0.42f),
+                                    radius = cr * 0.55f,
                                 ),
-                                center = Offset(cx - cr * 0.28f, lidCy - cr * 0.42f),
-                                radius = cr * 0.55f,
-                            ),
-                            radius = cr,
-                            center = Offset(cx, lidCy),
-                        )
+                                radius = cr,
+                                center = Offset(cx, lidCy),
+                            )
 
-                        // 4) 유리 굴절 – 하단 내부 밝은 반사
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.18f),
-                                    Color.Transparent,
+                            // 4) 유리 굴절 – 하단 내부 밝은 반사
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.18f * lidAlpha),
+                                        Color.Transparent,
+                                    ),
+                                    center = Offset(cx + cr * 0.15f, lidCy - cr * 0.05f),
+                                    radius = cr * 0.45f,
                                 ),
-                                center = Offset(cx + cr * 0.15f, lidCy - cr * 0.05f),
-                                radius = cr * 0.45f,
-                            ),
-                            radius = cr,
-                            center = Offset(cx, lidCy),
-                        )
+                                radius = cr,
+                                center = Offset(cx, lidCy),
+                            )
+                        }
                     }
 
-                    // 작은 스페큘러 하이라이트 (광원 반짝이)
+                    // 작은 스페큘러 하이라이트 (광원 반짝이) – 뚜껑과 함께 페이드 아웃
                     val shineCy = lidCy - cr * 0.44f
-                    if (shineCy > cy - cr - 20f) {
+                    if (shineCy > cy - cr - 20f && lidAlpha > 0f) {
                         // 큰 글로우
                         drawCircle(
-                            color  = Color.White.copy(alpha = 0.35f),
+                            color  = Color.White.copy(alpha = 0.35f * lidAlpha),
                             radius = cr * 0.10f,
                             center = Offset(cx - cr * 0.28f, shineCy),
                         )
                         // 작은 하이라이트 점
                         drawCircle(
-                            color  = Color.White.copy(alpha = 0.90f),
+                            color  = Color.White.copy(alpha = 0.90f * lidAlpha),
                             radius = cr * 0.045f,
                             center = Offset(cx - cr * 0.28f, shineCy),
                         )
