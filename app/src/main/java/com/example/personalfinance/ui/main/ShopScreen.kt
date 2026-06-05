@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 
 private enum class ShopTab(val label: String) {
     NEW("✦ 신상"),
+    FACE("얼굴"),
     HAIR("헤어"),
     HAT("모자"),
     TOP("상의"),
@@ -54,34 +55,34 @@ private data class ShopItem(
 
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
 
-private fun assetDisplayName(filename: String): String {
-    val noExt = filename.removeSuffix(".png")
-    val stripped = noExt
-        .replace(Regex("^top\\d+_"), "")
-        .replace(Regex("^bot\\d+_"), "")
-        .replace(Regex("^[hta]_"), "")
-    return stripped.replace("_", " ").replaceFirstChar { it.uppercase() }.ifBlank { noExt }
-}
 
-private fun listAssets(context: android.content.Context, categoryFolder: String): List<Pair<String, String>> {
+private fun listAssets(
+    context: android.content.Context,
+    categoryFolder: String
+): List<Pair<String, String>> {
     val grades = listOf("common", "rare", "unique", "legendary")
     val result = mutableListOf<Pair<String, String>>()
-    for (g in grades) {
+
+    for (grade in grades) {
         val items = runCatching {
-            context.assets.list("character_layers/$g/$categoryFolder")
+            context.assets.list("character_layers/$grade/$categoryFolder")
                 ?.filter { it.endsWith(".png") }
                 ?.sorted()
                 ?: emptyList()
         }.getOrDefault(emptyList())
+
         for (item in items) {
-            result.add(g to item)
+            result.add(grade to item)
         }
     }
+
     return result
 }
 
+
 /** 장착 상태에서 해당 카테고리 레이어만 교체 → 미리보기 패널용 */
 private fun CharacterLayerState.withItem(item: ShopItem): CharacterLayerState = when (item.category) {
+    ShopTab.FACE -> copy(face       = item.filename)
     ShopTab.HAIR -> copy(hair       = item.filename)
     ShopTab.HAT  -> copy(hat        = item.filename)
     ShopTab.TOP  -> copy(topClothes = item.filename)
@@ -92,6 +93,7 @@ private fun CharacterLayerState.withItem(item: ShopItem): CharacterLayerState = 
 
 /** 기본 캐릭터(빈 상태) + 해당 아이템만 → 썸네일 카드용 */
 private fun ShopItem.toThumbState(): CharacterLayerState = when (category) {
+    ShopTab.FACE -> CharacterLayerState(face       = filename)
     ShopTab.HAIR -> CharacterLayerState(hair       = filename)
     ShopTab.HAT  -> CharacterLayerState(hat        = filename)
     ShopTab.TOP  -> CharacterLayerState(topClothes = filename)
@@ -124,29 +126,39 @@ fun ShopScreen(navController: NavController) {
         equipped.withItem(item)
     }
 
-    val allItems: Map<ShopTab, List<ShopItem>> = remember {
-        fun build(categoryFolder: String, tab: ShopTab) =
-            listAssets(context, categoryFolder).map { (grade, file) ->
-                ShopItem(grade, categoryFolder, file, assetDisplayName(file), shopStore.priceOf(grade), tab)
-            }
+   val allItems: Map<ShopTab, List<ShopItem>> = remember {
+    fun build(categoryFolder: String, tab: ShopTab) =
+        listAssets(context, categoryFolder).map { (grade, file) ->
+            ShopItem(
+                grade = grade,
+                categoryFolder = categoryFolder,
+                filename = file,
+                displayName = ItemNames.display(file),
+                price = shopStore.priceOf(grade),
+                category = tab
+            )
+        }
 
-        val hairItems = build("hairs",       ShopTab.HAIR)
-        val hatItems  = build("hats",        ShopTab.HAT)
-        val topItems  = build("clothes",     ShopTab.TOP).filter { it.filename.startsWith("top") }
-        val botItems  = build("clothes",     ShopTab.BOT).filter { it.filename.startsWith("bot") }
-        val accItems  = build("accessories", ShopTab.ACC)
-        val newItems  = (hairItems + hatItems + topItems + botItems + accItems)
-            .filter { shopStore.isNew(it.filename) }
+    val faceItems = build("faces",       ShopTab.FACE)
+    val hairItems = build("hairs",       ShopTab.HAIR)
+    val hatItems  = build("hats",        ShopTab.HAT)
+    val topItems  = build("clothes",     ShopTab.TOP).filter { it.filename.startsWith("top") }
+    val botItems  = build("clothes",     ShopTab.BOT).filter { it.filename.startsWith("bot") }
+    val accItems  = build("accessories", ShopTab.ACC)
 
-        mapOf(
-            ShopTab.NEW  to newItems,
-            ShopTab.HAIR to hairItems,
-            ShopTab.HAT  to hatItems,
-            ShopTab.TOP  to topItems,
-            ShopTab.BOT  to botItems,
-            ShopTab.ACC  to accItems,
-        )
-    }
+    val newItems = (faceItems + hairItems + hatItems + topItems + botItems + accItems)
+        .filter { shopStore.isNew(it.filename) }
+
+    mapOf(
+        ShopTab.NEW  to newItems,
+        ShopTab.FACE to faceItems,
+        ShopTab.HAIR to hairItems,
+        ShopTab.HAT  to hatItems,
+        ShopTab.TOP  to topItems,
+        ShopTab.BOT  to botItems,
+        ShopTab.ACC  to accItems,
+    )
+}
 
     val currentItems = allItems[selectedTab] ?: emptyList()
 
@@ -260,13 +272,13 @@ fun ShopScreen(navController: NavController) {
                             radius = 600f,
                         )
                     )
-                    .padding(vertical = 24.dp),  // ← 32→24
+                    .padding(vertical = 24.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CharacterLayerPreview(
                         layerState = previewState,
-                        size       = 160.dp,  // ← 200→160
+                        size       = 160.dp,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -294,6 +306,7 @@ fun ShopScreen(navController: NavController) {
                     val isNew      = shopStore.isNew(item.filename)
                     val isSelected = selectedItem?.filename == item.filename
                     val isEquipped = when (item.category) {
+                        ShopTab.FACE -> equipped.face       == item.filename
                         ShopTab.HAIR -> equipped.hair       == item.filename
                         ShopTab.HAT  -> equipped.hat        == item.filename
                         ShopTab.TOP  -> equipped.topClothes == item.filename
