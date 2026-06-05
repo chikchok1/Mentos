@@ -22,7 +22,6 @@ class Transaction(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0,
 
-    /** JWT sub 로 넘어오는 User.id */
     @Column(nullable = false)
     val userId: Long,
 
@@ -32,7 +31,6 @@ class Transaction(
     @Column(nullable = false)
     val merchantName: String,
 
-    /** ExpenseCategoryClassifier 카테고리 상수값 */
     @Column(nullable = false)
     var category: String,
 
@@ -40,11 +38,9 @@ class Transaction(
     @Column(nullable = false)
     val occurredAt: LocalDateTime,
 
-    /** "NOTIFICATION" | "MANUAL" */
     @Column(nullable = false)
     val source: String = "MANUAL",
 
-    /** 앱에서 생성한 고유 ID (중복 저장 방지) — nullable */
     @Column(nullable = true, length = 512)
     val clientTransactionId: String? = null,
 
@@ -52,12 +48,11 @@ class Transaction(
     val createdAt: LocalDateTime = LocalDateTime.now()
 
 ) {
-    // JPA no-arg
     protected constructor() : this(
-        userId      = 0,
-        amount      = 0,
+        userId       = 0,
+        amount       = 0,
         merchantName = "",
-        category    = "",
-        occurredAt  = LocalDateTime.now()
+        category     = "",
+        occurredAt   = LocalDateTime.now()
     )
 }

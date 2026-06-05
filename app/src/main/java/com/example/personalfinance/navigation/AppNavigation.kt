@@ -12,9 +12,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.example.personalfinance.data.TokenManager
 import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.network.ApiClient
@@ -50,11 +53,18 @@ sealed class Screen(val route: String) {
 fun AppNavigation(tokenManager: TokenManager) {
     val navController = rememberNavController()
     var startDestination by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         val token = tokenManager.getAccessToken()
         startDestination = if (token != null) Screen.Home.route else Screen.Login.route
         Log.i(TAG, "App start auth state: hasAccessToken=${token != null}, startDestination=$startDestination")
+        if (token != null) {
+            // 앱 재시작 시(토큰 있음) 서버에서 거래 내역 복원
+            withContext(Dispatchers.IO) {
+                UserStatsStore.getInstance(context).restoreFromServer()
+            }
+        }
     }
 
     if (startDestination == null) {
@@ -88,6 +98,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                                         val authData = response.body()!!
                                         tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
                                         extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
+                                        UserStatsStore.getInstance(context).restoreFromServer()
                                         navController.navigate(Screen.Home.route) {
                                             popUpTo(Screen.Login.route) { inclusive = true }
                                         }
@@ -122,6 +133,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                                             val authData = response.body()!!
                                             tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
                                             extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
+                                            UserStatsStore.getInstance(context).restoreFromServer()
                                             navController.navigate(Screen.Home.route) {
                                                 popUpTo(Screen.Login.route) { inclusive = true }
                                             }

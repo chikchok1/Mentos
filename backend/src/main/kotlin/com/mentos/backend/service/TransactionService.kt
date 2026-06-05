@@ -18,7 +18,6 @@ class TransactionService(
 
     @Transactional
     fun save(userId: Long, req: SaveTransactionRequest): TransactionResponse {
-        // clientTransactionId가 있으면 중복 체크
         val clientTransactionId = req.clientTransactionId
         if (clientTransactionId != null &&
             transactionRepository.existsByUserIdAndClientTransactionId(userId, clientTransactionId)
@@ -34,7 +33,7 @@ class TransactionService(
             amount              = req.amount,
             merchantName        = req.merchantName,
             category            = req.category,
-            occurredAt          = req.occurredAt,
+            occurredAt          = LocalDateTime.parse(req.occurredAt),
             source              = req.source,
             clientTransactionId = clientTransactionId
         )
@@ -50,6 +49,10 @@ class TransactionService(
     }
 
     // ── 조회 ────────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    fun getAll(userId: Long): List<TransactionResponse> =
+        transactionRepository.findByUserIdOrderByOccurredAtDesc(userId).map { it.toResponse() }
 
     @Transactional(readOnly = true)
     fun getByMonth(userId: Long, year: Int, month: Int): List<TransactionResponse> {
@@ -159,8 +162,8 @@ class TransactionService(
         amount       = amount,
         merchantName = merchantName,
         category     = category,
-        occurredAt   = occurredAt,
+        occurredAt   = occurredAt.toString(),
         source       = source,
-        createdAt    = createdAt
+        createdAt    = createdAt.toString()
     )
 }
