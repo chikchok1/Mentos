@@ -28,6 +28,7 @@ import com.example.personalfinance.data.*
 import com.example.personalfinance.ui.theme.*
 import java.time.LocalDateTime
 import java.time.YearMonth
+import kotlinx.coroutines.launch
 
 // ── 소비 성향 키워드 헬퍼 ─────────────────────────────────────────────────────
 
@@ -101,6 +102,11 @@ fun ProfileScreen(
     val store     = remember { UserStatsStore.getInstance(context) }
     val userStats by store.statsFlow.collectAsState()
     val nickname  by store.nicknameFlow.collectAsState()
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        store.refreshServerStats()
+    }
 
     val currentMonth = YearMonth.now()
     val transactions by store.transactionsFlow.collectAsState()
@@ -113,9 +119,9 @@ fun ProfileScreen(
     val categorySpending = userStats.categorySpending
     val totalSpending    = userStats.thisMonthSpending
     val topCategory      = userStats.topCategory
-    val currentJob       = UserStatsCalculator.determineJob(categorySpending)
+    val currentJob       = userStats.job
     val jobTitle         = UserStatsCalculator.jobTitle(currentJob)
-    val jobReason        = UserStatsCalculator.jobReason(currentJob, categorySpending, totalSpending)
+    val jobReason        = userStats.jobReason
     val tendencyLabel    = spendingTendencyLabel(topCategory)
     val topRatio = if (totalSpending > 0L) {
         ((categorySpending[topCategory] ?: 0L).toFloat() / totalSpending * 100).toInt()
@@ -138,6 +144,9 @@ fun ProfileScreen(
     // 닉네임 수정 다이얼로그
     var showEditDialog by remember { mutableStateOf(false) }
     var editingName    by remember { mutableStateOf("") }
+    var showBudgetDialog by remember { mutableStateOf(false) }
+    var editingBudget by remember { mutableStateOf("") }
+    var budgetSaveError by remember { mutableStateOf<String?>(null) }
 
     // 직업 이유 팝업
     var showJobDialog by remember { mutableStateOf(false) }
@@ -242,6 +251,58 @@ fun ProfileScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showEditDialog = false }) { Text("취소", color = Gray500) }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    if (showBudgetDialog) {
+        AlertDialog(
+            onDismissRequest = { showBudgetDialog = false },
+            title = { Text("월 예산 수정", fontWeight = FontWeight.SemiBold) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editingBudget,
+                        onValueChange = { value ->
+                            editingBudget = value.filter { it.isDigit() }.take(12)
+                            budgetSaveError = null
+                        },
+                        placeholder = { Text("월 예산을 입력하세요") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Blue500)
+                    )
+                    budgetSaveError?.let { message ->
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = RedDanger,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val budget = editingBudget.toLongOrNull()
+                    if (budget == null) {
+                        budgetSaveError = "숫자로 입력하세요."
+                        return@TextButton
+                    }
+                    scope.launch {
+                        val saved = store.updateMonthlyBudget(budget)
+                        if (saved) {
+                            showBudgetDialog = false
+                        } else {
+                            budgetSaveError = "서버 저장에 실패했습니다."
+                        }
+                    }
+                }) { Text("저장", color = Blue500, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBudgetDialog = false }) { Text("취소", color = Gray500) }
             },
             shape = RoundedCornerShape(20.dp)
         )
@@ -385,6 +446,42 @@ fun ProfileScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Gray50)
+                    .padding(18.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "월 예산",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Gray500
+                    )
+                    Text(
+                        formatWonProfile(userStats.monthlyBudget),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                IconButton(onClick = {
+                    editingBudget = userStats.monthlyBudget.toString()
+                    budgetSaveError = null
+                    showBudgetDialog = true
+                }) {
+                    Icon(Icons.Rounded.Edit, null, tint = Blue500, modifier = Modifier.size(20.dp))
                 }
             }
         }

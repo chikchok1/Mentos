@@ -11,7 +11,8 @@ import java.time.YearMonth
 
 @Service
 class TransactionService(
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val userStatsService: UserStatsService
 ) {
 
     // ── 저장 ────────────────────────────────────────────────────────────────
@@ -38,7 +39,9 @@ class TransactionService(
             clientTransactionId = clientTransactionId
         )
         return try {
-            transactionRepository.save(entity).toResponse()
+            val saved = transactionRepository.save(entity)
+            userStatsService.applyTransaction(userId, saved)
+            saved.toResponse()
         } catch (e: DataIntegrityViolationException) {
             if (clientTransactionId == null) throw e
             transactionRepository

@@ -43,6 +43,10 @@ fun HomeScreen(navController: NavController) {
     val userStats by store.statsFlow.collectAsState()
     val nickname  by store.nicknameFlow.collectAsState()
 
+    LaunchedEffect(Unit) {
+        store.refreshServerStats()
+    }
+
     val currentLevel      = userStats.currentLevel
     val currentXP         = userStats.currentXP
     val xpProgress        = UserStatsCalculator.levelProgress(currentXP)
@@ -65,10 +69,10 @@ fun HomeScreen(navController: NavController) {
         else ((thisSum - lastSum).toFloat() / lastSum * 100).toInt()
     }
     val topCategory = userStats.topCategory
-    val currentJob  = UserStatsCalculator.determineJob(userStats.categorySpending)
+    val currentJob  = userStats.job
     val jobTitle    = UserStatsCalculator.jobTitle(currentJob)
     val levelTitle  = UserStatsCalculator.levelTitle(currentLevel)
-    val jobReason   = UserStatsCalculator.jobReason(currentJob, userStats.categorySpending, thisMonthSpending)
+    val jobReason   = userStats.jobReason
 
     // 직업 이유 팝업
     var showJobDialog by remember { mutableStateOf(false) }
@@ -348,6 +352,13 @@ fun HomeScreen(navController: NavController) {
                             style      = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold,
                             modifier   = Modifier.padding(top = 8.dp, bottom = 20.dp)
+                        )
+
+                        Text(
+                            text = "월 예산 ₩${String.format("%,d", userStats.monthlyBudget)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Gray500,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
 
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
