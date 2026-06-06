@@ -33,6 +33,7 @@ import com.example.personalfinance.ui.main.ShopScreen
 import com.example.personalfinance.ui.auth.LoginScreen
 import com.example.personalfinance.ui.main.CharacterLayerTestScreen
 import com.example.personalfinance.ui.main.GachaDebugScreen
+import com.example.personalfinance.ui.main.ProfileScreen
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 sealed class Screen(val route: String) {
@@ -44,6 +45,7 @@ sealed class Screen(val route: String) {
     object Gacha     : Screen("gacha")
     object Inventory : Screen("inventory")
     object Shop      : Screen("shop")
+    object Profile   : Screen("profile")
     object NotificationDebug : Screen("notification_debug")
     object CharacterLayerTest : Screen("character_layer_test")
     object GachaDebug : Screen("gacha_debug")
@@ -177,11 +179,12 @@ fun AppNavigation(tokenManager: TokenManager) {
                 }
             )      
         }
-        composable(Screen.NotificationDebug.route) { NotificationDebugScreen(navController) }
-        composable(Screen.Gacha.route)             { GachaScreen(navController)             }
-        composable(Screen.Inventory.route)         { InventoryScreen(navController)         }
-        composable(Screen.Shop.route)              { ShopScreen(navController)              }
-        composable(Screen.CharacterLayerTest.route)  { CharacterLayerTestScreen(navController)  }
+        composable(Screen.Profile.route)              { ProfileScreen(navController)              }
+        composable(Screen.NotificationDebug.route)    { NotificationDebugScreen(navController)    }
+        composable(Screen.Gacha.route)                { GachaScreen(navController)                }
+        composable(Screen.Inventory.route)            { InventoryScreen(navController)            }
+        composable(Screen.Shop.route)                 { ShopScreen(navController)                 }
+        composable(Screen.CharacterLayerTest.route)   { CharacterLayerTestScreen(navController)   }
         composable(Screen.GachaDebug.route)           { GachaDebugScreen(navController)           }
     }
 }

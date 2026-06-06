@@ -6,6 +6,8 @@ import android.util.Log
 import com.example.personalfinance.network.ApiClient
 import com.example.personalfinance.network.SaveTransactionRequest
 import com.example.personalfinance.network.UpdateCategoryByClientIdRequest
+import com.example.personalfinance.network.UpdateBudgetRequest
+import com.example.personalfinance.network.UserStatsResponse
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.time.LocalDateTime
@@ -27,6 +29,10 @@ data class UserStats(
     val currentLevel: Int = 1,
     val currentXP: Int = 0,
     val nextLevelXP: Int = 100,
+    val monthlyBudget: Long = 1_500_000L,
+    val job: String = "beginner",
+    val jobReason: String = "이번 달 지출 내역이 없어 모험가로 시작했어요.",
+    val jobMonth: String = java.time.YearMonth.now().toString(),
     val thisMonthSpending: Long = 0L,
     val categorySpending: Map<String, Long> = ExpenseCategoryClassifier.categories.associateWith { 0L },
     val transactions: List<Transaction> = emptyList()
@@ -265,6 +271,10 @@ class UserStatsStore private constructor(context: Context) {
                 currentLevel      = UserStatsCalculator.calculateLevel(totalXP),
                 currentXP         = totalXP,
                 nextLevelXP       = UserStatsCalculator.nextLevelThreshold(totalXP),
+                monthlyBudget     = _statsFlow.value.monthlyBudget,
+                job               = _statsFlow.value.job,
+                jobReason         = _statsFlow.value.jobReason,
+                jobMonth          = _statsFlow.value.jobMonth,
                 thisMonthSpending = spending,
                 categorySpending  = categorySpending,
                 transactions      = restored
@@ -275,6 +285,43 @@ class UserStatsStore private constructor(context: Context) {
 
         } catch (e: Exception) {
             Log.w(TAG, "서버 복원 실패 (오프라인?): ${e.message}")
+        }
+    }
+
+    suspend fun refreshServerStats(): Boolean {
+        return try {
+            val tokenManager = TokenManager(appContext)
+            val api = ApiClient.getUserApi(appContext, tokenManager)
+            val resp = api.getStats()
+            if (!resp.isSuccessful) {
+                Log.w(TAG, "서버 통계 조회 실패 (HTTP ${resp.code()})")
+                false
+            } else {
+                resp.body()?.let { applyServerStats(it) }
+                true
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "서버 통계 조회 예외 (로컬 fallback 유지): ${e.message}")
+            false
+        }
+    }
+
+    suspend fun updateMonthlyBudget(monthlyBudget: Long): Boolean {
+        if (monthlyBudget <= 0L) return false
+        return try {
+            val tokenManager = TokenManager(appContext)
+            val api = ApiClient.getUserApi(appContext, tokenManager)
+            val resp = api.updateBudget(UpdateBudgetRequest(monthlyBudget))
+            if (resp.isSuccessful) {
+                resp.body()?.let { applyServerStats(it) }
+                true
+            } else {
+                Log.w(TAG, "서버 예산 수정 실패 (HTTP ${resp.code()})")
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "서버 예산 수정 예외: ${e.message}")
+            false
         }
     }
 
@@ -302,6 +349,14 @@ class UserStatsStore private constructor(context: Context) {
             currentLevel = UserStatsCalculator.calculateLevel(totalXP),
             currentXP = totalXP,
             nextLevelXP = UserStatsCalculator.nextLevelThreshold(totalXP),
+            monthlyBudget = prefs.getLong(KEY_MONTHLY_BUDGET, 1_500_000L),
+            job = prefs.getString(KEY_JOB, "beginner") ?: "beginner",
+            jobReason = prefs.getString(
+                KEY_JOB_REASON,
+                "이번 달 지출 내역이 없어 모험가로 시작했어요."
+            ) ?: "이번 달 지출 내역이 없어 모험가로 시작했어요.",
+            jobMonth = prefs.getString(KEY_JOB_MONTH, YearMonth.now().toString())
+                ?: YearMonth.now().toString(),
             thisMonthSpending = thisMonthSpending,
             categorySpending = thisMonthCategorySpending,
             transactions = transactions
@@ -368,13 +423,21 @@ class UserStatsStore private constructor(context: Context) {
         val newTotalXP = current.currentXP + UserStatsCalculator.calculateEarnedXP(
             amount = amount,
             thisMonthSpending = newSpending,
-            monthlyBudget = 1_500_000L
+            monthlyBudget = current.monthlyBudget
         )
 
         val newStats = UserStats(
             currentLevel = UserStatsCalculator.calculateLevel(newTotalXP),
             currentXP = newTotalXP,
             nextLevelXP = UserStatsCalculator.nextLevelThreshold(newTotalXP),
+            monthlyBudget = current.monthlyBudget,
+            job = UserStatsCalculator.determineJob(newCategorySpending),
+            jobReason = UserStatsCalculator.jobReason(
+                UserStatsCalculator.determineJob(newCategorySpending),
+                newCategorySpending,
+                newSpending
+            ),
+            jobMonth = YearMonth.now().toString(),
             thisMonthSpending = newSpending,
             categorySpending = newCategorySpending,
             transactions = newTransactions
@@ -456,6 +519,9 @@ class UserStatsStore private constructor(context: Context) {
         }
 
         val newStats = current.copy(
+            job = newJob,
+            jobReason = UserStatsCalculator.jobReason(newJob, newCategorySpending, newSpending),
+            jobMonth = YearMonth.now().toString(),
             thisMonthSpending = newSpending,
             categorySpending = newCategorySpending,
             transactions = newTransactions
@@ -486,6 +552,10 @@ class UserStatsStore private constructor(context: Context) {
             .putInt(KEY_XP, stats.currentXP)
             .putInt(KEY_TOTAL_XP, stats.currentXP)
             .putInt(KEY_NEXT_XP, stats.nextLevelXP)
+            .putLong(KEY_MONTHLY_BUDGET, stats.monthlyBudget)
+            .putString(KEY_JOB, stats.job)
+            .putString(KEY_JOB_REASON, stats.jobReason)
+            .putString(KEY_JOB_MONTH, stats.jobMonth)
             .putLong(KEY_SPENDING, stats.thisMonthSpending)
             .putString(KEY_TRANSACTIONS, TransactionJsonCodec.encode(transactions))
 
@@ -497,6 +567,27 @@ class UserStatsStore private constructor(context: Context) {
 
         _statsFlow.value = stats
         _transactionsFlow.value = transactions
+    }
+
+    private fun applyServerStats(serverStats: UserStatsResponse) {
+        val normalizedCategories = ExpenseCategoryClassifier.categories.associateWith { category ->
+            serverStats.categorySpending[category] ?: 0L
+        }
+        val current = _statsFlow.value
+        val totalXp = serverStats.totalXp.coerceAtLeast(0)
+        val newStats = current.copy(
+            currentLevel = serverStats.level,
+            currentXP = totalXp,
+            nextLevelXP = UserStatsCalculator.nextLevelThreshold(totalXp),
+            monthlyBudget = serverStats.monthlyBudget,
+            job = serverStats.job,
+            jobReason = serverStats.jobReason,
+            jobMonth = serverStats.jobMonth,
+            thisMonthSpending = serverStats.thisMonthSpending,
+            categorySpending = normalizedCategories
+        )
+
+        saveStats(newStats, current.transactions)
     }
 
     private fun categorySpendingKey(category: String): String =
@@ -550,6 +641,10 @@ class UserStatsStore private constructor(context: Context) {
         private const val KEY_XP = "key_xp"
         private const val KEY_TOTAL_XP = "key_total_xp"
         private const val KEY_NEXT_XP = "key_next_xp"
+        private const val KEY_MONTHLY_BUDGET = "key_monthly_budget"
+        private const val KEY_JOB = "key_job"
+        private const val KEY_JOB_REASON = "key_job_reason"
+        private const val KEY_JOB_MONTH = "key_job_month"
         private const val KEY_SPENDING = "key_spending"
         private const val KEY_CATEGORY_SPENDING_PREFIX = "key_category_spending_"
         private const val KEY_TRANSACTIONS = "key_transactions"

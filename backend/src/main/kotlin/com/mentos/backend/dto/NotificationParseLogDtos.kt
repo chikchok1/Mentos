@@ -1,8 +1,4 @@
-package com.example.personalfinance.network
-
-import retrofit2.Response
-import retrofit2.http.Body
-import retrofit2.http.POST
+package com.mentos.backend.dto
 
 data class SaveNotificationParseLogRequest(
     val diagnosticId: String,
@@ -15,7 +11,7 @@ data class SaveNotificationParseLogRequest(
     val parsedMerchant: String? = null,
     val parsedOccurredAt: String? = null,
     val clientTransactionId: String? = null,
-    val receivedAt: String,
+    val receivedAt: String? = null,
     val createdAt: String? = null
 )
 
@@ -25,10 +21,3 @@ data class NotificationParseLogResponse(
     val receivedAt: String,
     val createdAt: String
 )
-
-interface NotificationParseLogApi {
-    @POST("api/notification-parse-logs")
-    suspend fun save(
-        @Body req: SaveNotificationParseLogRequest
-    ): Response<NotificationParseLogResponse>
-}

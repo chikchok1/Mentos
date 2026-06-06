@@ -19,6 +19,9 @@ interface TransactionRepository : JpaRepository<Transaction, Long> {
     /** 특정 유저의 전체 거래 목록 (최신순) */
     fun findByUserIdOrderByOccurredAtDesc(userId: Long): List<Transaction>
 
+    /** 특정 유저의 전체 거래 목록 (오래된순) */
+    fun findByUserIdOrderByOccurredAtAsc(userId: Long): List<Transaction>
+
     /** userId + clientTransactionId 중복 체크 */
     fun existsByUserIdAndClientTransactionId(userId: Long, clientTransactionId: String): Boolean
 

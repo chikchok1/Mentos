@@ -11,8 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -55,53 +53,6 @@ fun MenuScreen(
     val jobTitle   = UserStatsCalculator.jobTitle(currentJob)
     val itemCount  by store.transactionsFlow.collectAsState()
 
-    // ── 프로필 수정 다이얼로그 상태 ───────────────────────────────────────────
-    var showEditDialog by remember { mutableStateOf(false) }
-    var editingName    by remember { mutableStateOf("") }
-
-    if (showEditDialog) {
-        val focusRequester = remember { FocusRequester() }
-        LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
-        AlertDialog(
-            onDismissRequest = { showEditDialog = false },
-            title = { Text("닉네임 변경", fontWeight = FontWeight.SemiBold) },
-            text = {
-                OutlinedTextField(
-                    value         = editingName,
-                    onValueChange = { if (it.length <= 12) editingName = it },
-                    placeholder   = { Text("닉네임을 입력하세요 (최대 12자)") },
-                    singleLine    = true,
-                    modifier      = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
-                    shape  = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Blue500,
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (editingName.isNotBlank()) {
-                            store.saveNickname(editingName)
-                        }
-                        showEditDialog = false
-                    }
-                ) {
-                    Text("저장", color = Blue500, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) {
-                    Text("취소", color = Gray500)
-                }
-            },
-            shape = RoundedCornerShape(20.dp),
-        )
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -125,7 +76,10 @@ fun MenuScreen(
 
         // ── Profile ───────────────────────────────────────────────────────────
         Row(
-            modifier          = Modifier.fillMaxWidth().padding(24.dp),
+            modifier          = Modifier
+                .fillMaxWidth()
+                .clickable { navController.navigate(com.example.personalfinance.navigation.Screen.Profile.route) }
+                .padding(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -135,7 +89,7 @@ fun MenuScreen(
                 contentAlignment = Alignment.Center
             ) { Text("👤", fontSize = 28.sp) }
             Spacer(Modifier.width(16.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text       = if (nickname.isBlank()) "사용자님" else "${nickname}님",
                     style      = MaterialTheme.typography.headlineSmall,
@@ -148,6 +102,7 @@ fun MenuScreen(
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
+            Icon(Icons.Rounded.ChevronRight, null, tint = Gray400)
         }
         HorizontalDivider(color = Gray100)
 
@@ -200,10 +155,7 @@ fun MenuScreen(
                 "🎰 가챠 테스트" to { navController.navigate(com.example.personalfinance.navigation.Screen.GachaDebug.route) },
                 "🎨 캐릭터 레이어 테스트" to { navController.navigate(com.example.personalfinance.navigation.Screen.CharacterLayerTest.route) },
                 "알림 설정" to {},
-                "프로필 수정" to {
-                    editingName    = nickname
-                    showEditDialog = true
-                },
+                "내 프로필" to { navController.navigate(com.example.personalfinance.navigation.Screen.Profile.route) },
                 "앱 정보" to {}
             ).forEach { (label, onClick) ->
                 Row(
