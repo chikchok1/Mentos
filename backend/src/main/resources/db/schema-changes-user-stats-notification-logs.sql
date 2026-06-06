@@ -34,15 +34,20 @@ CREATE TABLE notification_parse_logs (
     raw_text LONGTEXT NULL,
     status VARCHAR(40) NOT NULL,
     failure_reason VARCHAR(512) NULL,
-    amount BIGINT NULL,
-    merchant_name VARCHAR(255) NULL,
-    occurred_at DATETIME(6) NULL,
+    parsed_amount BIGINT NULL,
+    parsed_merchant VARCHAR(255) NULL,
+    parsed_occurred_at DATETIME(6) NULL,
     client_transaction_id VARCHAR(512) NULL,
+    received_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id),
     INDEX idx_notification_parse_logs_user_created (user_id, created_at),
+    INDEX idx_notification_parse_logs_user_received (user_id, received_at),
     INDEX idx_notification_parse_logs_status (status)
 );
+
+ALTER TABLE notification_parse_logs
+    MODIFY COLUMN received_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6);
 
 ALTER TABLE user_owned_items
     ADD CONSTRAINT uk_user_owned_items_user_item UNIQUE (user_id, item_id);

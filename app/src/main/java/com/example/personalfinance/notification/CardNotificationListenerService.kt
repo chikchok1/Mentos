@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 
 class CardNotificationListenerService : NotificationListenerService() {
 
@@ -383,17 +384,23 @@ class CardNotificationListenerService : NotificationListenerService() {
                         rawText = rawText,
                         status = status,
                         failureReason = failureReason,
-                        amount = amount,
-                        merchantName = merchantName,
-                        occurredAt = occurredAt,
-                        clientTransactionId = clientTransactionId
+                        parsedAmount = amount,
+                        parsedMerchant = merchantName,
+                        parsedOccurredAt = occurredAt,
+                        clientTransactionId = clientTransactionId,
+                        receivedAt = LocalDateTime.now().toString()
                     )
                 )
                 if (!response.isSuccessful) {
-                    Log.w(TAG, "Notification parse log sync failed HTTP ${response.code()}: $status")
+                    val errorBody = response.errorBody()?.string().orEmpty()
+                    Log.e(
+                        TAG,
+                        "Notification parse log sync failed HTTP ${response.code()}: " +
+                            "status=$status, error=$errorBody"
+                    )
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Notification parse log sync skipped: ${e.message}")
+                Log.e(TAG, "Notification parse log sync failed: ${e.message}", e)
             }
         }
     }

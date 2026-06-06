@@ -287,8 +287,8 @@ fun ProfileScreen(
             confirmButton = {
                 TextButton(onClick = {
                     val budget = editingBudget.toLongOrNull()
-                    if (budget == null) {
-                        budgetSaveError = "숫자로 입력하세요."
+                    if (budget == null || budget <= 0L) {
+                        budgetSaveError = "0보다 큰 숫자를 입력하세요."
                         return@TextButton
                     }
                     scope.launch {

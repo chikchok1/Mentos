@@ -14,7 +14,8 @@ import java.time.LocalDateTime
 @Table(
     name = "notification_parse_logs",
     indexes = [
-        Index(name = "idx_notification_parse_logs_user_created", columnList = "userId, createdAt"),
+        Index(name = "idx_notification_parse_logs_user_created", columnList = "user_id, created_at"),
+        Index(name = "idx_notification_parse_logs_user_received", columnList = "user_id, received_at"),
         Index(name = "idx_notification_parse_logs_status", columnList = "status")
     ]
 )
@@ -23,13 +24,13 @@ class NotificationParseLog(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0,
 
-    @Column(nullable = false)
+    @Column(name = "user_id", nullable = false)
     val userId: Long,
 
-    @Column(nullable = false, length = 512)
+    @Column(name = "diagnostic_id", nullable = false, length = 512)
     val diagnosticId: String,
 
-    @Column(nullable = false, length = 128)
+    @Column(name = "package_name", nullable = false, length = 128)
     val packageName: String,
 
     @Column(nullable = true, length = 512)
@@ -42,22 +43,25 @@ class NotificationParseLog(
     @Column(nullable = false, length = 40)
     val status: String,
 
-    @Column(nullable = true, length = 512)
+    @Column(name = "failure_reason", nullable = true, length = 512)
     val failureReason: String? = null,
 
-    @Column(nullable = true)
-    val amount: Long? = null,
+    @Column(name = "parsed_amount", nullable = true)
+    val parsedAmount: Long? = null,
 
-    @Column(nullable = true, length = 255)
-    val merchantName: String? = null,
+    @Column(name = "parsed_merchant", nullable = true, length = 255)
+    val parsedMerchant: String? = null,
 
-    @Column(nullable = true)
-    val occurredAt: LocalDateTime? = null,
+    @Column(name = "parsed_occurred_at", nullable = true)
+    val parsedOccurredAt: LocalDateTime? = null,
 
-    @Column(nullable = true, length = 512)
+    @Column(name = "client_transaction_id", nullable = true, length = 512)
     val clientTransactionId: String? = null,
 
-    @Column(nullable = false)
+    @Column(name = "received_at", nullable = false)
+    val receivedAt: LocalDateTime = LocalDateTime.now(),
+
+    @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now()
 ) {
     protected constructor() : this(

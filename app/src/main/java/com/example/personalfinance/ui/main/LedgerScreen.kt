@@ -139,6 +139,7 @@ fun LedgerScreen(navController: NavController) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store   = remember { UserStatsStore.getInstance(context) }
     val storedTransactions by store.transactionsFlow.collectAsState()
+    val userStats by store.statsFlow.collectAsState()
 
     var selectedTab      by remember { mutableStateOf(0) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
@@ -147,12 +148,19 @@ fun LedgerScreen(navController: NavController) {
 
     var showCategoryEditSheet      by remember { mutableStateOf(false) }
     var selectedTransactionForEdit by remember { mutableStateOf<Transaction?>(null) }
+    var showBudgetDialog           by remember { mutableStateOf(false) }
+    var editingBudget              by remember { mutableStateOf("") }
+    var budgetSaveError            by remember { mutableStateOf<String?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope      = rememberCoroutineScope()
 
     // ── 서버 stats 상태 ───────────────────────────────────────────────────────
     var serverStats      by remember { mutableStateOf<MonthlyStatsResponse?>(null) }
     var statsLoading     by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        store.refreshServerStats()
+    }
 
     // 월이 바뀔 때마다 서버에서 dailyBreakdown 조회
     // statsLoading은 헤더 스피너용 — UI는 로컬 데이터를 즉시 표시하고 서버 응답으로 업데이트
@@ -201,9 +209,13 @@ fun LedgerScreen(navController: NavController) {
     // 월별 동향 (전체 거래 기반)
     val monthlyData = buildMonthlyData(storedTransactions)
 
-    val monthlyBudget        = 1_500_000
-    val budgetUsedPercentage = totalSpending.toFloat() / monthlyBudget * 100f
-    val remainingBudget      = monthlyBudget - totalSpending
+    val monthlyBudget        = userStats.monthlyBudget
+    val budgetUsedPercentage = if (monthlyBudget > 0L) {
+        totalSpending.toFloat() / monthlyBudget.toFloat() * 100f
+    } else {
+        0f
+    }
+    val remainingBudget      = monthlyBudget - totalSpending.toLong()
 
     Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
 
@@ -292,10 +304,67 @@ fun LedgerScreen(navController: NavController) {
                 )
                 2 -> BudgetTab(
                     budgetEnabled, { budgetEnabled = it },
-                    monthlyBudget, budgetUsedPercentage, remainingBudget, categories
+                    monthlyBudget, budgetUsedPercentage, remainingBudget, categories,
+                    onEditBudget = {
+                        editingBudget = monthlyBudget.toString()
+                        budgetSaveError = null
+                        showBudgetDialog = true
+                    }
                 )
             }
         }
+    }
+
+    if (showBudgetDialog) {
+        AlertDialog(
+            onDismissRequest = { showBudgetDialog = false },
+            title = { Text("월 예산 수정", fontWeight = FontWeight.SemiBold) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editingBudget,
+                        onValueChange = { value ->
+                            editingBudget = value.filter { it.isDigit() }.take(12)
+                            budgetSaveError = null
+                        },
+                        placeholder = { Text("월 예산을 입력하세요") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Blue500)
+                    )
+                    budgetSaveError?.let { message ->
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = RedDanger,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val budget = editingBudget.toLongOrNull()
+                    if (budget == null || budget <= 0L) {
+                        budgetSaveError = "0보다 큰 숫자를 입력하세요."
+                        return@TextButton
+                    }
+                    scope.launch {
+                        val saved = store.updateMonthlyBudget(budget)
+                        if (saved) {
+                            showBudgetDialog = false
+                        } else {
+                            budgetSaveError = "서버 저장에 실패했습니다."
+                        }
+                    }
+                }) { Text("저장", color = Blue500, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBudgetDialog = false }) { Text("취소", color = Gray500) }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 
     // ── Category Edit Bottom Sheet ───────────────────────────────────────────
@@ -1152,10 +1221,11 @@ private fun TrendsTab(
 private fun BudgetTab(
     budgetEnabled: Boolean,
     onToggle: (Boolean) -> Unit,
-    monthlyBudget: Int,
+    monthlyBudget: Long,
     budgetUsedPercentage: Float,
-    remainingBudget: Int,
-    categories: List<CategoryData>
+    remainingBudget: Long,
+    categories: List<CategoryData>,
+    onEditBudget: () -> Unit
 ) {
     Column(modifier = Modifier.padding(24.dp)) {
         Box(
@@ -1173,11 +1243,16 @@ private fun BudgetTab(
                 ) {
                     Text("예산 추적",
                         style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = Gray600)
-                    Switch(
-                        checked         = budgetEnabled,
-                        onCheckedChange = onToggle,
-                        colors          = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Blue500)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onEditBudget) {
+                            Icon(Icons.Rounded.Edit, null, tint = Blue500, modifier = Modifier.size(20.dp))
+                        }
+                        Switch(
+                            checked         = budgetEnabled,
+                            onCheckedChange = onToggle,
+                            colors          = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Blue500)
+                        )
+                    }
                 }
 
                 if (budgetEnabled) {

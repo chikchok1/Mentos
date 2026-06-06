@@ -307,11 +307,11 @@ class UserStatsStore private constructor(context: Context) {
     }
 
     suspend fun updateMonthlyBudget(monthlyBudget: Long): Boolean {
+        if (monthlyBudget <= 0L) return false
         return try {
-            val normalizedBudget = monthlyBudget.coerceAtLeast(0L)
             val tokenManager = TokenManager(appContext)
             val api = ApiClient.getUserApi(appContext, tokenManager)
-            val resp = api.updateBudget(UpdateBudgetRequest(normalizedBudget))
+            val resp = api.updateBudget(UpdateBudgetRequest(monthlyBudget))
             if (resp.isSuccessful) {
                 resp.body()?.let { applyServerStats(it) }
                 true

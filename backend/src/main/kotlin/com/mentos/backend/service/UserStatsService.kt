@@ -23,7 +23,7 @@ class UserStatsService(
 
     @Transactional
     fun updateBudget(userId: Long, monthlyBudget: Long): UserStatsResponse {
-        require(monthlyBudget >= 0L) { "월 예산은 0원 이상이어야 합니다." }
+        require(monthlyBudget > 0L) { "월 예산은 0원보다 커야 합니다." }
         val month = currentMonth()
         val user = findUser(userId)
         user.monthlyBudget = monthlyBudget

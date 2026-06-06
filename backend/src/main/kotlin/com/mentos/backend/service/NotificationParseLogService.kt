@@ -15,6 +15,7 @@ class NotificationParseLogService(
     @Transactional
     fun save(userId: Long, req: SaveNotificationParseLogRequest): NotificationParseLogResponse {
         require(req.status in allowedStatuses) { "지원하지 않는 알림 로그 상태입니다. status=${req.status}" }
+        val now = LocalDateTime.now()
 
         val entity = NotificationParseLog(
             userId = userId,
@@ -24,19 +25,29 @@ class NotificationParseLogService(
             rawText = req.rawText,
             status = req.status,
             failureReason = req.failureReason?.take(512),
-            amount = req.amount,
-            merchantName = req.merchantName?.take(255),
-            occurredAt = req.occurredAt?.let { LocalDateTime.parse(it) },
-            clientTransactionId = req.clientTransactionId?.take(512)
+            parsedAmount = req.parsedAmount,
+            parsedMerchant = req.parsedMerchant?.take(255),
+            parsedOccurredAt = req.parsedOccurredAt.parseDateTimeOrNull(),
+            clientTransactionId = req.clientTransactionId?.take(512),
+            receivedAt = req.receivedAt.parseDateTimeOrDefault(now),
+            createdAt = req.createdAt.parseDateTimeOrDefault(now)
         )
 
         val saved = notificationParseLogRepository.save(entity)
         return NotificationParseLogResponse(
             id = saved.id,
             status = saved.status,
+            receivedAt = saved.receivedAt.toString(),
             createdAt = saved.createdAt.toString()
         )
     }
+
+    private fun String?.parseDateTimeOrDefault(defaultValue: LocalDateTime): LocalDateTime =
+        this?.let { value -> runCatching { LocalDateTime.parse(value) }.getOrNull() }
+            ?: defaultValue
+
+    private fun String?.parseDateTimeOrNull(): LocalDateTime? =
+        this?.let { value -> runCatching { LocalDateTime.parse(value) }.getOrNull() }
 
     private val allowedStatuses = setOf(
         "RECEIVED",
