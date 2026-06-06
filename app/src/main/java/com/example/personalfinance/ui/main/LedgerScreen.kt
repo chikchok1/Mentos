@@ -9,10 +9,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.runtime.*
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
+import java.time.format.DateTimeFormatter
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +59,24 @@ private fun categoryEmojiForClassifier(category: String): String = when (categor
     ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL     -> "💊"
     else                                                   -> "📦"
 }
+
+private fun transactionSourceLabel(source: String): String = when (source) {
+    TransactionSource.NOTIFICATION -> "알림 자동 저장"
+    TransactionSource.SAMPLE -> "샘플"
+    TransactionSource.MANUAL -> "직접 입력"
+    else -> source
+}
+
+private fun formatTransactionDateTime(value: String, fallback: String): String =
+    runCatching {
+        LocalDateTime.parse(value).format(detailDateTimeFormatter)
+    }.getOrDefault(fallback)
+
+private fun shortenTransactionId(id: String): String =
+    if (id.length <= 48) id else id.take(36) + "..." + id.takeLast(10)
+
+private val detailDateTimeFormatter: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yyyy년 M월 d일 HH:mm")
 
 /**
  * 서버 dailyBreakdown + 로컬 거래 목록을 병합해 DailySpendingData 생성
@@ -148,10 +168,14 @@ fun LedgerScreen(navController: NavController) {
 
     var showCategoryEditSheet      by remember { mutableStateOf(false) }
     var selectedTransactionForEdit by remember { mutableStateOf<Transaction?>(null) }
+    var showTransactionDetailSheet by remember { mutableStateOf(false) }
+    var selectedTransactionDetailId by remember { mutableStateOf<String?>(null) }
+    var reopenDetailAfterCategoryEdit by remember { mutableStateOf(false) }
     var showBudgetDialog           by remember { mutableStateOf(false) }
     var editingBudget              by remember { mutableStateOf("") }
     var budgetSaveError            by remember { mutableStateOf<String?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val detailSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope      = rememberCoroutineScope()
 
     // ── 서버 stats 상태 ───────────────────────────────────────────────────────
@@ -189,6 +213,10 @@ fun LedgerScreen(navController: NavController) {
             YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate())
         }.getOrNull()
         txMonth == currentMonth
+    }
+    val selectedTransactionForDetail = selectedTransactionDetailId?.let { selectedId ->
+        storedTransactions.firstOrNull { it.id == selectedId }
+            ?: transactions.firstOrNull { it.id == selectedId }
     }
 
     // 카테고리별 지출: 서버 categoryBreakdown 우선, 없으면 로컬 집계
@@ -292,8 +320,8 @@ fun LedgerScreen(navController: NavController) {
                     statsLoading       = statsLoading,
                     onCategoryClick    = { cat -> selectedCategory = if (selectedCategory == cat) null else cat },
                     onTransactionClick = { tx ->
-                        selectedTransactionForEdit = tx
-                        showCategoryEditSheet = true
+                        selectedTransactionDetailId = tx.id
+                        showTransactionDetailSheet = true
                     }
                 )
                 1 -> TrendsTab(
@@ -367,10 +395,131 @@ fun LedgerScreen(navController: NavController) {
         )
     }
 
+    if (showTransactionDetailSheet && selectedTransactionForDetail != null) {
+        val detailTx = selectedTransactionForDetail
+        val catColor = categoryColorFor(detailTx.category)
+        ModalBottomSheet(
+            onDismissRequest = {
+                showTransactionDetailSheet = false
+                selectedTransactionDetailId = null
+            },
+            sheetState = detailSheetState,
+            containerColor = Color.White,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 32.dp)
+            ) {
+                // ── 헤더: 금액 + 가게명 + 카테고리 뱃지 ──────────────────────
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        formatWon(detailTx.amount),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Gray900
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        detailTx.store,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Gray500
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(99.dp),
+                        color = catColor.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = "${categoryEmojiForClassifier(detailTx.category)}  ${detailTx.category}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = catColor,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Gray100)
+
+                // ── 상세 행들 ────────────────────────────────────────────────
+                Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                    TransactionDetailRow(
+                        icon  = Icons.Rounded.DateRange,
+                        label = "결제 일시",
+                        value = formatTransactionDateTime(detailTx.occurredAt, detailTx.date)
+                    )
+                    TransactionDetailRow(
+                        icon  = Icons.Rounded.Info,
+                        label = "저장 방식",
+                        value = transactionSourceLabel(detailTx.source)
+                    )
+                    if (detailTx.source == TransactionSource.NOTIFICATION || detailTx.source == TransactionSource.SAMPLE) {
+                        TransactionDetailRow(
+                            icon       = Icons.Rounded.Notifications,
+                            label      = "알림 원문",
+                            value      = "원문 없음",
+                            valueColor = Gray400
+                        )
+                    }
+                    TransactionDetailRow(
+                        icon       = Icons.Rounded.Lock,
+                        label      = "거래 ID",
+                        value      = shortenTransactionId(detailTx.id),
+                        isMono     = true
+                    )
+                }
+
+                HorizontalDivider(color = Gray100, modifier = Modifier.padding(top = 4.dp))
+
+                // ── 버튼 ────────────────────────────────────────────────────
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            selectedTransactionForEdit = detailTx
+                            reopenDetailAfterCategoryEdit = true
+                            scope.launch { detailSheetState.hide() }.invokeOnCompletion {
+                                showTransactionDetailSheet = false
+                                showCategoryEditSheet = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Blue500),
+                        elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
+                    ) {
+                        Text("카테고리 수정", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color.White)
+                    }
+                    TextButton(
+                        onClick = {
+                            showTransactionDetailSheet = false
+                            selectedTransactionDetailId = null
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("닫기", fontWeight = FontWeight.Medium, fontSize = 15.sp, color = Gray400)
+                    }
+                }
+            }
+        }
+    }
+
     // ── Category Edit Bottom Sheet ───────────────────────────────────────────
     if (showCategoryEditSheet && selectedTransactionForEdit != null) {
         ModalBottomSheet(
-            onDismissRequest = { showCategoryEditSheet = false },
+            onDismissRequest = {
+                showCategoryEditSheet = false
+                reopenDetailAfterCategoryEdit = false
+            },
             sheetState       = sheetState,
             containerColor   = Color.White,
             shape            = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -408,9 +557,16 @@ fun LedgerScreen(navController: NavController) {
                                     .clickable {
                                         selectedTransactionForEdit?.let { tx ->
                                             store.updateTransactionCategory(tx.id, cat)
+                                            selectedTransactionDetailId = tx.id
                                         }
                                         scope.launch { sheetState.hide() }.invokeOnCompletion {
-                                            if (!sheetState.isVisible) showCategoryEditSheet = false
+                                            if (!sheetState.isVisible) {
+                                                showCategoryEditSheet = false
+                                                if (reopenDetailAfterCategoryEdit) {
+                                                    reopenDetailAfterCategoryEdit = false
+                                                    showTransactionDetailSheet = true
+                                                }
+                                            }
                                         }
                                     }
                                     .padding(vertical = 16.dp),
@@ -434,6 +590,53 @@ fun LedgerScreen(navController: NavController) {
             }
         }
     }
+}
+
+@Composable
+private fun TransactionDetailRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    valueColor: Color = Gray700,
+    isMono: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Gray400,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = Gray500
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        Text(
+            value.ifBlank { "-" },
+            style = if (isMono)
+                MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+            else
+                MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isMono) FontWeight.Normal else FontWeight.Medium,
+            color = if (isMono) Gray400 else valueColor,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
+        )
+    }
+    HorizontalDivider(color = Gray100)
 }
 
 // ── 일별 지출 바차트 (공통 컴포넌트) ─────────────────────────────────────────────
