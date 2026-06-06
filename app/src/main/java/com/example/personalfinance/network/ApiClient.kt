@@ -52,6 +52,9 @@ object ApiClient {
     private var gachaApi: GachaApi? = null
     private var classificationApi: ClassificationApi? = null
     private var transactionApi: TransactionApi? = null
+    private var userApi: UserApi? = null
+    private var notificationParseLogApi: NotificationParseLogApi? = null
+    private var shopApi: ShopApi? = null
 
     @Synchronized
     fun getGachaApi(context: Context, tokenManager: TokenManager): GachaApi {
@@ -80,6 +83,36 @@ object ApiClient {
         return transactionApi!!
     }
 
+    @Synchronized
+    fun getUserApi(context: Context, tokenManager: TokenManager): UserApi {
+        getAuthApi(context, tokenManager)
+        if (userApi == null) {
+            userApi = retrofit!!.create(UserApi::class.java)
+        }
+        return userApi!!
+    }
+
+    @Synchronized
+    fun getNotificationParseLogApi(
+        context: Context,
+        tokenManager: TokenManager
+    ): NotificationParseLogApi {
+        getAuthApi(context, tokenManager)
+        if (notificationParseLogApi == null) {
+            notificationParseLogApi = retrofit!!.create(NotificationParseLogApi::class.java)
+        }
+        return notificationParseLogApi!!
+    }
+
+    @Synchronized
+    fun getShopApi(context: Context, tokenManager: TokenManager): ShopApi {
+        getAuthApi(context, tokenManager)
+        if (shopApi == null) {
+            shopApi = retrofit!!.create(ShopApi::class.java)
+        }
+        return shopApi!!
+    }
+
     /** 로그아웃 시 호출 — 캐시된 API 인스턴스 및 Retrofit 초기화 */
     @Synchronized
     fun reset() {
@@ -88,5 +121,8 @@ object ApiClient {
         gachaApi         = null
         classificationApi = null
         transactionApi   = null
+        userApi          = null
+        notificationParseLogApi = null
+        shopApi          = null
     }
 }

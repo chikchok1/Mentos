@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.personalfinance.data.CharacterAppearanceStore
+import com.example.personalfinance.data.PurchaseResult
 import com.example.personalfinance.data.ShopStore
 import com.example.personalfinance.ui.components.CharacterLayerPreview
 import com.example.personalfinance.ui.components.CharacterLayerState
@@ -118,6 +119,11 @@ fun ShopScreen(navController: NavController) {
     val coroutine = rememberCoroutineScope()
     val snackbar  = remember { SnackbarHostState() }
 
+    // 화면 진입 시 서버에서 보유 아이템 및 코인 잔액 복원
+    LaunchedEffect(Unit) {
+        shopStore.restoreFromServer()
+    }
+
     var selectedTab  by remember { mutableStateOf(ShopTab.NEW) }
     var selectedItem by remember { mutableStateOf<ShopItem?>(null) }
 
@@ -163,14 +169,28 @@ fun ShopScreen(navController: NavController) {
     val currentItems = allItems[selectedTab] ?: emptyList()
 
     fun handleBuy(item: ShopItem) {
-        if (ownedItems.contains("${item.folder}/${item.filename}")) return
-        val success = shopStore.spendCoins(item.price)
-        if (success) {
-            shopStore.addOwned(item.folder, item.filename)
-            appearanceStore.save(equipped.withItem(item))
-            coroutine.launch { snackbar.showSnackbar("${item.displayName} 구매 & 장착 완료!") }
-        } else {
-            coroutine.launch { snackbar.showSnackbar("코인이 부족해요") }
+        coroutine.launch {
+            val result = shopStore.purchaseWithServer(
+                folder   = item.folder,
+                filename = item.filename,
+                price    = item.price
+            )
+            when (result) {
+                is PurchaseResult.Success -> {
+                    // 구매 성공 시 해당 아이템 장착
+                    appearanceStore.save(equipped.withItem(item))
+                    snackbar.showSnackbar("${item.displayName} 구매 & 장착 완료!")
+                }
+                is PurchaseResult.AlreadyOwned -> {
+                    snackbar.showSnackbar("이미 보유 중인 아이템이에요")
+                }
+                is PurchaseResult.InsufficientCoins -> {
+                    snackbar.showSnackbar("코인이 부족해요")
+                }
+                is PurchaseResult.Error -> {
+                    snackbar.showSnackbar(result.message)
+                }
+            }
         }
     }
 
@@ -425,7 +445,7 @@ private fun ShopItemCard(
                 }
                 isOwned -> {
                     Text(
-                        "보유",
+                        "보유중인 항목",
                         fontSize = 9.sp,
                         color    = Color(0xFF534AB7),
                         modifier = Modifier
