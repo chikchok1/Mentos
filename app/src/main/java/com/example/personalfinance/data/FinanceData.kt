@@ -21,7 +21,8 @@ data class Transaction(
     val status: String = TransactionStatus.APPROVED_RECORDED,
     val source: String = TransactionSource.SAMPLE,
     val occurredAt: String = java.time.LocalDateTime.now().toString(),
-    val id: String = "$source|$occurredAt|$amount|$store"
+    val id: String = "$source|$occurredAt|$amount|$store",
+    val rawNotification: String? = null
 )
 
 object TransactionStatus {
