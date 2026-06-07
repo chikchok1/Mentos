@@ -32,6 +32,8 @@ import com.example.personalfinance.ui.main.InventoryScreen
 import com.example.personalfinance.ui.main.ShopScreen
 import com.example.personalfinance.ui.auth.LoginScreen
 import com.example.personalfinance.ui.main.CharacterLayerTestScreen
+import com.example.personalfinance.ui.main.FriendComparisonScreen
+import com.example.personalfinance.ui.main.FriendsScreen
 import com.example.personalfinance.ui.main.GachaDebugScreen
 import com.example.personalfinance.ui.main.ProfileScreen
 
@@ -46,6 +48,10 @@ sealed class Screen(val route: String) {
     object Inventory : Screen("inventory")
     object Shop      : Screen("shop")
     object Profile   : Screen("profile")
+    object Friends   : Screen("friends")
+    object FriendComparison : Screen("friends/{friendId}/comparison") {
+        fun route(friendId: Long): String = "friends/$friendId/comparison"
+    }
     object NotificationDebug : Screen("notification_debug")
     object CharacterLayerTest : Screen("character_layer_test")
     object GachaDebug : Screen("gacha_debug")
@@ -180,6 +186,11 @@ fun AppNavigation(tokenManager: TokenManager) {
             )      
         }
         composable(Screen.Profile.route)              { ProfileScreen(navController)              }
+        composable(Screen.Friends.route)              { FriendsScreen(navController)              }
+        composable(Screen.FriendComparison.route) { backStackEntry ->
+            val friendId = backStackEntry.arguments?.getString("friendId")?.toLongOrNull() ?: 0L
+            FriendComparisonScreen(navController, friendId)
+        }
         composable(Screen.NotificationDebug.route)    { NotificationDebugScreen(navController)    }
         composable(Screen.Gacha.route)                { GachaScreen(navController)                }
         composable(Screen.Inventory.route)            { InventoryScreen(navController)            }

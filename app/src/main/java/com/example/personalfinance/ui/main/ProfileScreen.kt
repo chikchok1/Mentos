@@ -102,10 +102,12 @@ fun ProfileScreen(
     val store     = remember { UserStatsStore.getInstance(context) }
     val userStats by store.statsFlow.collectAsState()
     val nickname  by store.nicknameFlow.collectAsState()
+    val privacy   by store.privacyFlow.collectAsState()
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         store.refreshServerStats()
+        store.refreshPrivacy()
     }
 
     val currentMonth = YearMonth.now()
@@ -147,6 +149,7 @@ fun ProfileScreen(
     var showBudgetDialog by remember { mutableStateOf(false) }
     var editingBudget by remember { mutableStateOf("") }
     var budgetSaveError by remember { mutableStateOf<String?>(null) }
+    var privacySaveError by remember { mutableStateOf<String?>(null) }
 
     // 직업 이유 팝업
     var showJobDialog by remember { mutableStateOf(false) }
@@ -483,6 +486,59 @@ fun ProfileScreen(
                 }) {
                     Icon(Icons.Rounded.Edit, null, tint = Blue500, modifier = Modifier.size(20.dp))
                 }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Gray50)
+                    .padding(18.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "친구에게 지출 공개",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Gray500
+                    )
+                    Text(
+                        if (privacy.spendingVisibility == "FRIENDS") {
+                            "친구에게 이번 달 지출과 카테고리를 보여줍니다."
+                        } else {
+                            "친구에게 지출 비공개로 표시됩니다."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Gray600,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    privacySaveError?.let { message ->
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = RedDanger,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                }
+                Switch(
+                    checked = privacy.spendingVisibility == "FRIENDS",
+                    onCheckedChange = { checked ->
+                        privacySaveError = null
+                        scope.launch {
+                            val saved = store.updateSpendingVisibility(checked)
+                            if (!saved) {
+                                privacySaveError = "공개 설정 저장에 실패했습니다."
+                            }
+                        }
+                    }
+                )
             }
         }
 

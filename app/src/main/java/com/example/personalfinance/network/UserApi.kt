@@ -24,6 +24,16 @@ data class UpdateBudgetRequest(
     val monthlyBudget: Long
 )
 
+data class PrivacySettingsRequest(
+    val spendingVisibility: String,
+    val characterVisibility: String
+)
+
+data class PrivacySettingsResponse(
+    val spendingVisibility: String,
+    val characterVisibility: String
+)
+
 interface UserApi {
     @GET("api/users/me/stats")
     suspend fun getStats(): Response<UserStatsResponse>
@@ -35,4 +45,12 @@ interface UserApi {
 
     @POST("api/users/me/stats/recalculate")
     suspend fun recalculateStats(): Response<UserStatsResponse>
+
+    @GET("api/users/me/privacy")
+    suspend fun getPrivacy(): Response<PrivacySettingsResponse>
+
+    @PATCH("api/users/me/privacy")
+    suspend fun updatePrivacy(
+        @Body req: PrivacySettingsRequest
+    ): Response<PrivacySettingsResponse>
 }
