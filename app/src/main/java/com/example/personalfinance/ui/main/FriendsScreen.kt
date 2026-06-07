@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +63,7 @@ import androidx.navigation.NavController
 import com.example.personalfinance.data.FriendsStore
 import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.navigation.Screen
+import com.example.personalfinance.network.CategorySpendingResponse
 import com.example.personalfinance.network.ComparisonUserResponse
 import com.example.personalfinance.network.FriendRequestResponse
 import com.example.personalfinance.network.FriendResponse
@@ -77,7 +79,6 @@ import com.example.personalfinance.ui.theme.Gray700
 import com.example.personalfinance.ui.theme.Gray900
 import com.example.personalfinance.ui.theme.GreenSuccess
 import com.example.personalfinance.ui.theme.Purple50
-import com.example.personalfinance.ui.theme.Purple500
 import com.example.personalfinance.ui.theme.RedDanger
 import kotlinx.coroutines.launch
 
@@ -106,10 +107,7 @@ fun FriendsScreen(navController: NavController) {
             .background(Color.White)
             .verticalScroll(rememberScrollState())
     ) {
-        Header(
-            title = "친구",
-            onBack = { navController.popBackStack() }
-        )
+        Header(title = "친구", onBack = { navController.popBackStack() })
 
         Column(modifier = Modifier.padding(24.dp)) {
             OutlinedTextField(
@@ -136,8 +134,7 @@ fun FriendsScreen(navController: NavController) {
 
             message?.let {
                 Spacer(Modifier.height(10.dp))
-                Text(it, color = Gray600, style = MaterialTheme.typography.bodySmall)
-                LaunchedEffect(it) { store.clearMessage() }
+                Text(it, color = RedDanger, style = MaterialTheme.typography.bodySmall)
             }
 
             if (isLoading) {
@@ -154,7 +151,11 @@ fun FriendsScreen(navController: NavController) {
                 searchResults.forEach { result ->
                     SearchResultCard(
                         result = result,
-                        onSend = { scope.launch { store.sendRequest(result.id) } },
+                        onSend = {
+                            result.id?.let { receiverId ->
+                                scope.launch { store.sendRequest(receiverId) }
+                            }
+                        },
                         onAccept = {
                             result.pendingRequestId?.let { requestId ->
                                 scope.launch { store.acceptRequest(requestId) }
@@ -172,8 +173,8 @@ fun FriendsScreen(navController: NavController) {
                     RequestCard(
                         request = request,
                         received = true,
-                        onAccept = { scope.launch { store.acceptRequest(request.id) } },
-                        onReject = { scope.launch { store.rejectRequest(request.id) } }
+                        onAccept = { request.id?.let { scope.launch { store.acceptRequest(it) } } },
+                        onReject = { request.id?.let { scope.launch { store.rejectRequest(it) } } }
                     )
                 }
             }
@@ -215,7 +216,9 @@ fun FriendComparisonScreen(navController: NavController, friendId: Long) {
     val comparison by store.comparison.collectAsState()
 
     LaunchedEffect(friendId) {
-        store.loadComparison(friendId)
+        if (friendId > 0L) {
+            store.loadComparison(friendId)
+        }
     }
 
     Column(
@@ -224,36 +227,48 @@ fun FriendComparisonScreen(navController: NavController, friendId: Long) {
             .background(Color.White)
             .verticalScroll(rememberScrollState())
     ) {
-        Header(
-            title = "친구 비교",
-            onBack = { navController.popBackStack() }
-        )
+        Header(title = "친구 비교", onBack = { navController.popBackStack() })
 
         val data = comparison
-        if (data == null) {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = Blue500)
-            }
-        } else {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(
-                    "${data.month} 기준",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Gray500,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ComparisonUserCard("나", data.me, Modifier.weight(1f))
-                    ComparisonUserCard("친구", data.friend, Modifier.weight(1f))
+        when {
+            friendId <= 0L -> {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    EmptyText("친구 정보를 찾을 수 없습니다.")
                 }
-                SectionTitle("월별 소비 비교")
-                SpendingComparison(data.me, data.friend)
-                SectionTitle("카테고리별 소비")
-                CategoryComparison(data.me, data.friend)
+            }
+            data == null -> {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Blue500)
+                }
+            }
+            data.me == null || data.friend == null -> {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    EmptyText("친구 비교 정보를 불러오지 못했습니다.")
+                }
+            }
+            else -> {
+                val me = data.me
+                val friend = data.friend
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        "${data.month ?: ""} 기준",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Gray500,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ComparisonUserCard("나", me, Modifier.weight(1f))
+                        ComparisonUserCard("친구", friend, Modifier.weight(1f))
+                    }
+                    SectionTitle("월별 소비 비교")
+                    SpendingComparison(me, friend)
+                    SectionTitle("카테고리별 소비")
+                    CategoryComparison(me, friend)
+                }
             }
         }
     }
@@ -267,7 +282,7 @@ private fun Header(title: String, onBack: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.Rounded.ArrowBack, null, tint = Gray600)
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = Gray600)
         }
         Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.width(48.dp))
@@ -307,20 +322,25 @@ private fun SearchResultCard(
     onSend: () -> Unit,
     onAccept: () -> Unit
 ) {
+    val status = result.requestStatus.orEmpty()
     SimpleCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Avatar()
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(displayName(result.nickname, result.email, result.id), fontWeight = FontWeight.SemiBold)
-                Text("Lv.${result.level} · ${UserStatsCalculator.jobTitle(result.job)}", color = Gray500, fontSize = 13.sp)
+                Text(
+                    "Lv.${result.level ?: 1} · ${UserStatsCalculator.jobTitle(result.job ?: "beginner")}",
+                    color = Gray500,
+                    fontSize = 13.sp
+                )
             }
-            when (result.requestStatus) {
+            when (status) {
                 "NONE" -> SmallActionButton("요청", Icons.Rounded.PersonAdd, onSend)
                 "PENDING_RECEIVED" -> SmallActionButton("수락", Icons.Rounded.Check, onAccept)
                 "PENDING_SENT" -> StatusChip("요청됨")
                 "FRIEND" -> StatusChip("친구")
-                else -> StatusChip(result.requestStatus)
+                else -> StatusChip(status.ifBlank { "확인 필요" })
             }
         }
     }
@@ -342,13 +362,13 @@ private fun RequestCard(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(displayName(nickname, email, id), fontWeight = FontWeight.SemiBold)
-                Text(request.status, color = Gray500, fontSize = 13.sp)
+                Text(request.status ?: "PENDING", color = Gray500, fontSize = 13.sp)
             }
             if (received) {
-                IconButton(onClick = onAccept) {
+                IconButton(onClick = onAccept, enabled = request.id != null) {
                     Icon(Icons.Rounded.Check, null, tint = GreenSuccess)
                 }
-                IconButton(onClick = onReject) {
+                IconButton(onClick = onReject, enabled = request.id != null) {
                     Icon(Icons.Rounded.Close, null, tint = RedDanger)
                 }
             }
@@ -362,29 +382,26 @@ private fun FriendCard(
     onCompare: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val spendingVisible = friend.monthlySpendingVisible == true
     SimpleCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Avatar()
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(displayName(friend.nickname, friend.email, friend.friendId), fontWeight = FontWeight.SemiBold)
-                if (friend.characterVisible) {
+                if (friend.characterVisible == true) {
                     Text(
                         "Lv.${friend.level ?: 1} · ${UserStatsCalculator.jobTitle(friend.job ?: "beginner")}",
                         color = Gray500,
                         fontSize = 13.sp
                     )
-                    Text(
-                        "XP ${friend.totalXp ?: 0}",
-                        color = Gray400,
-                        fontSize = 12.sp
-                    )
+                    Text("XP ${friend.totalXp ?: 0}", color = Gray400, fontSize = 12.sp)
                 } else {
                     Text("캐릭터 비공개", color = Gray500, fontSize = 13.sp)
                 }
                 Text(
-                    if (friend.monthlySpendingVisible) "이번 달 ${formatWon(friend.monthlySpending ?: 0L)}" else "지출 비공개",
-                    color = if (friend.monthlySpendingVisible) Blue500 else Gray500,
+                    if (spendingVisible) "이번 달 ${formatWon(friend.monthlySpending ?: 0L)}" else "지출 비공개",
+                    color = if (spendingVisible) Blue500 else Gray500,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -430,7 +447,7 @@ private fun ComparisonUserCard(label: String, user: ComparisonUserResponse, modi
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(10.dp))
-            if (user.characterVisible) {
+            if (user.characterVisible == true) {
                 Text("Lv.${user.level ?: 1}", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 Text("${user.totalXp ?: 0} XP", color = Gray600, fontSize = 13.sp)
                 Text(UserStatsCalculator.jobTitle(user.job ?: "beginner"), color = Blue500, fontSize = 13.sp)
@@ -443,11 +460,12 @@ private fun ComparisonUserCard(label: String, user: ComparisonUserResponse, modi
 
 @Composable
 private fun SpendingComparison(me: ComparisonUserResponse, friend: ComparisonUserResponse) {
+    val friendVisible = friend.monthlySpendingVisible == true
     SimpleCard {
-        SpendingRow("나", me.monthlySpendingVisible, me.monthlySpending)
+        SpendingRow("나", me.monthlySpendingVisible == true, me.monthlySpending)
         HorizontalDivider(color = Gray100, modifier = Modifier.padding(vertical = 10.dp))
-        SpendingRow("친구", friend.monthlySpendingVisible, friend.monthlySpending)
-        if (!friend.monthlySpendingVisible) {
+        SpendingRow("친구", friendVisible, friend.monthlySpending)
+        if (!friendVisible) {
             Spacer(Modifier.height(8.dp))
             Text("친구가 지출 정보를 비공개로 설정했습니다.", color = Gray500, fontSize = 13.sp)
         }
@@ -478,30 +496,40 @@ private fun SpendingRow(label: String, visible: Boolean, amount: Long?) {
 private fun CategoryComparison(me: ComparisonUserResponse, friend: ComparisonUserResponse) {
     SimpleCard {
         Text("나", fontWeight = FontWeight.SemiBold, color = Gray700)
-        CategoryList(me)
+        CategoryList(me.categorySpending.orEmpty())
         Spacer(Modifier.height(14.dp))
         Text("친구", fontWeight = FontWeight.SemiBold, color = Gray700)
-        if (!friend.monthlySpendingVisible) {
+        if (friend.monthlySpendingVisible != true) {
             Text("지출 비공개", color = Gray500, modifier = Modifier.padding(top = 8.dp))
         } else {
-            CategoryList(friend)
+            CategoryList(friend.categorySpending.orEmpty())
         }
     }
 }
 
 @Composable
-private fun CategoryList(user: ComparisonUserResponse) {
-    if (user.categorySpending.isEmpty()) {
+private fun CategoryList(categories: List<CategorySpendingResponse>) {
+    if (categories.isEmpty()) {
         Text("이번 달 소비 내역이 없습니다.", color = Gray400, modifier = Modifier.padding(top = 8.dp))
         return
     }
-    user.categorySpending.forEach { category ->
+    categories.forEach { category ->
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(category.category, color = Gray600, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Text("${formatWon(category.amount)} · ${category.ratio}%", color = Gray900, fontWeight = FontWeight.SemiBold)
+            Text(
+                category.category ?: "기타",
+                color = Gray600,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                "${formatWon(category.amount ?: 0L)} · ${category.ratio ?: 0}%",
+                color = Gray900,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
@@ -533,7 +561,7 @@ private fun Avatar() {
 }
 
 @Composable
-private fun SmallActionButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun SmallActionButton(text: String, icon: ImageVector, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
@@ -554,9 +582,10 @@ private fun StatusChip(text: String) {
     )
 }
 
-private fun displayName(nickname: String?, email: String?, id: Long): String =
+private fun displayName(nickname: String?, email: String?, id: Long?): String =
     nickname?.takeIf { it.isNotBlank() }
         ?: email?.takeIf { it.isNotBlank() }
-        ?: "사용자 #$id"
+        ?: id?.let { "사용자 #$it" }
+        ?: "사용자"
 
 private fun formatWon(amount: Long): String = "${String.format("%,d", amount)}원"

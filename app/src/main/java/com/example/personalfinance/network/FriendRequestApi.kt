@@ -11,15 +11,15 @@ data class FriendRequestCreateRequest(
 )
 
 data class FriendRequestResponse(
-    val id: Long,
-    val requesterId: Long,
+    val id: Long?,
+    val requesterId: Long?,
     val requesterEmail: String?,
     val requesterNickname: String?,
-    val receiverId: Long,
+    val receiverId: Long?,
     val receiverEmail: String?,
     val receiverNickname: String?,
-    val status: String,
-    val createdAt: String,
+    val status: String?,
+    val createdAt: String?,
     val respondedAt: String?
 )
 

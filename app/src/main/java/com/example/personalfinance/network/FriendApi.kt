@@ -7,18 +7,18 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 data class FriendSearchResponse(
-    val id: Long,
+    val id: Long?,
     val email: String?,
     val nickname: String?,
-    val level: Int,
-    val totalXp: Int,
-    val currentXp: Int,
-    val nextLevelXp: Int,
-    val job: String,
-    val jobReason: String,
-    val jobMonth: String,
-    val alreadyFriend: Boolean,
-    val requestStatus: String,
+    val level: Int?,
+    val totalXp: Int?,
+    val currentXp: Int?,
+    val nextLevelXp: Int?,
+    val job: String?,
+    val jobReason: String?,
+    val jobMonth: String?,
+    val alreadyFriend: Boolean?,
+    val requestStatus: String?,
     val pendingRequestId: Long?
 )
 
@@ -33,21 +33,21 @@ data class FriendResponse(
     val job: String?,
     val jobReason: String?,
     val jobMonth: String?,
-    val characterVisible: Boolean,
-    val ownedItems: List<String>,
+    val characterVisible: Boolean?,
+    val ownedItems: List<String>?,
     val representativeItemId: String?,
-    val monthlySpendingVisible: Boolean,
+    val monthlySpendingVisible: Boolean?,
     val monthlySpending: Long?
 )
 
 data class FriendComparisonResponse(
-    val month: String,
-    val me: ComparisonUserResponse,
-    val friend: ComparisonUserResponse
+    val month: String?,
+    val me: ComparisonUserResponse?,
+    val friend: ComparisonUserResponse?
 )
 
 data class ComparisonUserResponse(
-    val id: Long,
+    val id: Long?,
     val email: String?,
     val nickname: String?,
     val level: Int?,
@@ -57,18 +57,18 @@ data class ComparisonUserResponse(
     val job: String?,
     val jobReason: String?,
     val jobMonth: String?,
-    val characterVisible: Boolean,
-    val monthlySpendingVisible: Boolean,
-    val spendingPrivacyStatus: String,
+    val characterVisible: Boolean?,
+    val monthlySpendingVisible: Boolean?,
+    val spendingPrivacyStatus: String?,
     val monthlySpending: Long?,
-    val topCategories: List<CategorySpendingResponse>,
-    val categorySpending: List<CategorySpendingResponse>
+    val topCategories: List<CategorySpendingResponse>?,
+    val categorySpending: List<CategorySpendingResponse>?
 )
 
 data class CategorySpendingResponse(
-    val category: String,
-    val amount: Long,
-    val ratio: Int
+    val category: String?,
+    val amount: Long?,
+    val ratio: Int?
 )
 
 interface FriendApi {

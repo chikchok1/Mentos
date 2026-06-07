@@ -8,6 +8,7 @@ import com.example.personalfinance.network.FriendRequestCreateRequest
 import com.example.personalfinance.network.FriendRequestResponse
 import com.example.personalfinance.network.FriendResponse
 import com.example.personalfinance.network.FriendSearchResponse
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,9 +40,9 @@ class FriendsStore private constructor(context: Context) {
     suspend fun refreshAll() {
         _isLoading.value = true
         try {
-            refreshFriends()
-            refreshReceived()
-            refreshSent()
+            safeRefresh("친구 정보를 불러오지 못했습니다.") { refreshFriends() }
+            safeRefresh("받은 요청을 불러오지 못했습니다.") { refreshReceived() }
+            safeRefresh("보낸 요청을 불러오지 못했습니다.") { refreshSent() }
         } finally {
             _isLoading.value = false
         }
@@ -70,7 +71,7 @@ class FriendsStore private constructor(context: Context) {
             val response = api.create(FriendRequestCreateRequest(receiverId))
             if (response.isSuccessful) {
                 _message.value = "친구 요청을 보냈습니다."
-                refreshSent()
+                safeRefresh("보낸 요청을 새로고침하지 못했습니다.") { refreshSent() }
             } else {
                 fail(response.code(), "친구 요청 실패")
             }
@@ -83,8 +84,8 @@ class FriendsStore private constructor(context: Context) {
             val response = api.accept(requestId)
             if (response.isSuccessful) {
                 _message.value = "친구 요청을 수락했습니다."
-                refreshReceived()
-                refreshFriends()
+                safeRefresh("받은 요청을 새로고침하지 못했습니다.") { refreshReceived() }
+                safeRefresh("친구 목록을 새로고침하지 못했습니다.") { refreshFriends() }
             } else {
                 fail(response.code(), "친구 요청 수락 실패")
             }
@@ -97,7 +98,7 @@ class FriendsStore private constructor(context: Context) {
             val response = api.reject(requestId)
             if (response.isSuccessful) {
                 _message.value = "친구 요청을 거절했습니다."
-                refreshReceived()
+                safeRefresh("받은 요청을 새로고침하지 못했습니다.") { refreshReceived() }
             } else {
                 fail(response.code(), "친구 요청 거절 실패")
             }
@@ -110,7 +111,7 @@ class FriendsStore private constructor(context: Context) {
             val response = api.deleteFriend(friendId)
             if (response.isSuccessful) {
                 _message.value = "친구를 삭제했습니다."
-                refreshFriends()
+                safeRefresh("친구 목록을 새로고침하지 못했습니다.") { refreshFriends() }
             } else {
                 fail(response.code(), "친구 삭제 실패")
             }
@@ -167,11 +168,24 @@ class FriendsStore private constructor(context: Context) {
         _isLoading.value = true
         try {
             block()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "$errorMessage: ${e.message}")
             _message.value = errorMessage
         } finally {
             _isLoading.value = false
+        }
+    }
+
+    private suspend fun safeRefresh(errorMessage: String, block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "$errorMessage: ${e.message}")
+            _message.value = errorMessage
         }
     }
 
