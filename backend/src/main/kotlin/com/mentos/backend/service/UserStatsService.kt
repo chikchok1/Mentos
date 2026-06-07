@@ -48,7 +48,7 @@ class UserStatsService(
     ): PrivacySettingsResponse {
         val user = findUser(userId)
         user.spendingVisibility = parseVisibility(spendingVisibility, allowPrivate = true)
-        user.characterVisibility = parseVisibility(characterVisibility, allowPrivate = false)
+        user.characterVisibility = parseVisibility(characterVisibility, allowPrivate = true)
         return userRepository.save(user).toPrivacyResponse()
     }
 

@@ -98,6 +98,9 @@ private fun listCategoryAssets(
     return result
 }
 
+private fun CharacterLayerState.hasEquippedItem(): Boolean =
+    listOf(face, hair, hat, accessory, topClothes, botClothes).any { !it.isNullOrBlank() }
+
 // ── InventoryScreen ───────────────────────────────────────────────────────────
 
 @Composable
@@ -120,7 +123,13 @@ fun InventoryScreen(navController: NavController) {
     // 화면 진입 시 서버 동기화 (실패 시 로컬 데이터로 폴백)
     LaunchedEffect(Unit) {
         try {
+            val localBeforeRestore = equipped
             shopStore.restoreFromServer()
+            val restored = appearanceStore.restoreFromServer()
+            val serverState = appearanceStore.appearanceFlow.value
+            if (restored && localBeforeRestore.hasEquippedItem() && !serverState.hasEquippedItem()) {
+                appearanceStore.saveWithServer(localBeforeRestore, shopStore.ownedItems.value)
+            }
         } catch (e: Exception) {
             // 네트워크 오류 등은 무시하고 로컬 데이터로 동작
             android.util.Log.w("InventoryScreen", "서버 동기화 실패 (로컬 폴백): ${e.message}")
@@ -298,8 +307,12 @@ fun InventoryScreen(navController: NavController) {
                                             InventoryCategory.BOT  -> equipped.copy(botClothes = filename)
                                             InventoryCategory.ACC  -> equipped.copy(accessory = filename)
                                         }
-                                        appearanceStore.save(newAppearance)
                                         coroutine.launch {
+                                            val saved = appearanceStore.saveWithServer(newAppearance, ownedItems)
+                                            if (!saved) {
+                                                snackbarHostState.showSnackbar("캐릭터 서버 저장에 실패했습니다.")
+                                                return@launch
+                                            }
                                             snackbarHostState.showSnackbar("장착 완료!")
                                         }
                                     }

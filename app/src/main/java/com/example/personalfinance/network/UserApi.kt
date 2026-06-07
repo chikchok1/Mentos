@@ -34,6 +34,21 @@ data class PrivacySettingsResponse(
     val characterVisibility: String
 )
 
+data class EquippedItemDto(
+    val slot: String?,
+    val itemId: String?,
+    val layerOrder: Int?
+)
+
+data class CharacterAppearanceResponse(
+    val baseCharacter: String?,
+    val equippedItems: List<EquippedItemDto>?
+)
+
+data class UpdateCharacterRequest(
+    val equippedItems: List<EquippedItemDto>
+)
+
 interface UserApi {
     @GET("api/users/me/stats")
     suspend fun getStats(): Response<UserStatsResponse>
@@ -53,4 +68,12 @@ interface UserApi {
     suspend fun updatePrivacy(
         @Body req: PrivacySettingsRequest
     ): Response<PrivacySettingsResponse>
+
+    @GET("api/users/me/character")
+    suspend fun getCharacter(): Response<CharacterAppearanceResponse>
+
+    @PATCH("api/users/me/character")
+    suspend fun updateCharacter(
+        @Body req: UpdateCharacterRequest
+    ): Response<CharacterAppearanceResponse>
 }

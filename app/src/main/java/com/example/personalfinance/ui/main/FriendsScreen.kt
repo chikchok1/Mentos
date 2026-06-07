@@ -61,13 +61,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.personalfinance.data.FriendsStore
+import com.example.personalfinance.data.toLayerState
 import com.example.personalfinance.data.UserStatsCalculator
 import com.example.personalfinance.navigation.Screen
 import com.example.personalfinance.network.CategorySpendingResponse
+import com.example.personalfinance.network.CharacterAppearanceResponse
 import com.example.personalfinance.network.ComparisonUserResponse
 import com.example.personalfinance.network.FriendRequestResponse
 import com.example.personalfinance.network.FriendResponse
 import com.example.personalfinance.network.FriendSearchResponse
+import com.example.personalfinance.ui.components.CharacterLayerPreview
 import com.example.personalfinance.ui.theme.Blue50
 import com.example.personalfinance.ui.theme.Blue500
 import com.example.personalfinance.ui.theme.Gray100
@@ -325,10 +328,18 @@ private fun SearchResultCard(
     val status = result.requestStatus.orEmpty()
     SimpleCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar()
+            Avatar(
+                characterVisible = result.characterVisible == true,
+                appearance = result.characterAppearance
+            )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(displayName(result.nickname, result.email, result.id), fontWeight = FontWeight.SemiBold)
+                Text(
+                    displayName(result.nickname, result.email, result.id),
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text(
                     "Lv.${result.level ?: 1} · ${UserStatsCalculator.jobTitle(result.job ?: "beginner")}",
                     color = Gray500,
@@ -356,12 +367,27 @@ private fun RequestCard(
     val id = if (received) request.requesterId else request.receiverId
     val email = if (received) request.requesterEmail else request.receiverEmail
     val nickname = if (received) request.requesterNickname else request.receiverNickname
+    val characterVisible = if (received) {
+        request.requesterCharacterVisible == true
+    } else {
+        request.receiverCharacterVisible == true
+    }
+    val characterAppearance = if (received) {
+        request.requesterCharacterAppearance
+    } else {
+        request.receiverCharacterAppearance
+    }
     SimpleCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar()
+            Avatar(characterVisible = characterVisible, appearance = characterAppearance)
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(displayName(nickname, email, id), fontWeight = FontWeight.SemiBold)
+                Text(
+                    displayName(nickname, email, id),
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text(request.status ?: "PENDING", color = Gray500, fontSize = 13.sp)
             }
             if (received) {
@@ -385,10 +411,19 @@ private fun FriendCard(
     val spendingVisible = friend.monthlySpendingVisible == true
     SimpleCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar()
+            Avatar(
+                characterVisible = friend.characterVisible == true,
+                appearance = friend.characterAppearance,
+                size = 58
+            )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(displayName(friend.nickname, friend.email, friend.friendId), fontWeight = FontWeight.SemiBold)
+                Text(
+                    displayName(friend.nickname, friend.email, friend.friendId),
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 if (friend.characterVisible == true) {
                     Text(
                         "Lv.${friend.level ?: 1} · ${UserStatsCalculator.jobTitle(friend.job ?: "beginner")}",
@@ -438,6 +473,12 @@ private fun ComparisonUserCard(label: String, user: ComparisonUserResponse, modi
     ) {
         Column {
             Text(label, color = Gray600, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Avatar(
+                characterVisible = user.characterVisible == true,
+                appearance = user.characterAppearance,
+                size = 72
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 displayName(user.nickname, user.email, user.id),
@@ -549,14 +590,26 @@ private fun SimpleCard(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun Avatar() {
+private fun Avatar(
+    characterVisible: Boolean = false,
+    appearance: CharacterAppearanceResponse? = null,
+    size: Int = 46
+) {
     Box(
         modifier = Modifier
-            .size(46.dp)
+            .size(size.dp)
             .background(Brush.linearGradient(listOf(Blue50, Purple50)), CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        Icon(Icons.Rounded.People, null, tint = Blue500)
+        if (characterVisible) {
+            CharacterLayerPreview(
+                layerState = appearance.toLayerState(),
+                size = (size - 6).dp,
+                modifier = Modifier.padding(3.dp)
+            )
+        } else {
+            Icon(Icons.Rounded.People, null, tint = Blue500, modifier = Modifier.size((size / 2).dp))
+        }
     }
 }
 

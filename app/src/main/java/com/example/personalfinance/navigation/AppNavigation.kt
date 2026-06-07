@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.personalfinance.data.TokenManager
+import com.example.personalfinance.data.CharacterAppearanceStore
 import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.network.ApiClient
 import org.json.JSONObject
@@ -73,6 +74,7 @@ fun AppNavigation(tokenManager: TokenManager) {
             // 앱 재시작 시(토큰 있음) 서버에서 거래 내역 복원
             withContext(Dispatchers.IO) {
                 UserStatsStore.getInstance(context).restoreFromServer()
+                CharacterAppearanceStore.getInstance(context).restoreFromServer()
             }
         }
     }
@@ -109,6 +111,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                                         tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
                                         extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
                                         UserStatsStore.getInstance(context).restoreFromServer()
+                                        CharacterAppearanceStore.getInstance(context).restoreFromServer()
                                         navController.navigate(Screen.Home.route) {
                                             popUpTo(Screen.Login.route) { inclusive = true }
                                         }
@@ -144,6 +147,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                                             tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
                                             extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
                                             UserStatsStore.getInstance(context).restoreFromServer()
+                                            CharacterAppearanceStore.getInstance(context).restoreFromServer()
                                             navController.navigate(Screen.Home.route) {
                                                 popUpTo(Screen.Login.route) { inclusive = true }
                                             }
@@ -177,6 +181,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                 },
                 onLogout = {
                     UserStatsStore.getInstance(context).clearForLogout()
+                    CharacterAppearanceStore.getInstance(context).clearForLogout()
                     tokenManager.clearTokens()
                     ApiClient.reset()
                     navController.navigate(Screen.Login.route) {

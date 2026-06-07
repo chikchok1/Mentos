@@ -21,7 +21,8 @@ class FriendService(
     private val userRepository: UserRepository,
     private val friendRepository: FriendRepository,
     private val friendRequestRepository: FriendRequestRepository,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val characterService: CharacterService
 ) {
     @Transactional(readOnly = true)
     fun search(currentUserId: Long, keyword: String): List<FriendSearchResponse> {
@@ -39,6 +40,7 @@ class FriendService(
                 pending.requesterId == currentUserId -> "PENDING_SENT"
                 else -> "PENDING_RECEIVED"
             }
+            val characterVisible = alreadyFriend && user.characterVisibility == VisibilityScope.FRIENDS
 
             FriendSearchResponse(
                 id = user.id,
@@ -53,7 +55,9 @@ class FriendService(
                 jobMonth = user.jobMonth,
                 alreadyFriend = alreadyFriend,
                 requestStatus = requestStatus,
-                pendingRequestId = pending?.id
+                pendingRequestId = pending?.id,
+                characterVisible = characterVisible,
+                characterAppearance = if (characterVisible) characterService.appearanceFor(user.id) else null
             )
         }
     }
@@ -128,6 +132,7 @@ class FriendService(
             characterVisible = characterVisible,
             ownedItems = if (characterVisible) sortedItems else emptyList(),
             representativeItemId = if (characterVisible) sortedItems.firstOrNull() else null,
+            characterAppearance = if (characterVisible) characterService.appearanceFor(id) else null,
             monthlySpendingVisible = spendingVisible,
             monthlySpending = monthlySpending
         )
@@ -152,6 +157,7 @@ class FriendService(
             jobReason = if (characterVisible) jobReason else null,
             jobMonth = if (characterVisible) jobMonth else null,
             characterVisible = characterVisible,
+            characterAppearance = if (characterVisible) characterService.appearanceFor(id) else null,
             monthlySpendingVisible = spendingVisible,
             spendingPrivacyStatus = spendingPrivacyStatus,
             monthlySpending = if (spendingVisible) stats.total else null,

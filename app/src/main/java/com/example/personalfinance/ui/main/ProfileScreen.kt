@@ -540,6 +540,49 @@ fun ProfileScreen(
                     }
                 )
             }
+
+            Spacer(Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Gray50)
+                    .padding(18.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "친구에게 캐릭터 공개",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Gray500
+                    )
+                    Text(
+                        if (privacy.characterVisibility == "FRIENDS") {
+                            "친구 화면에 현재 장착한 캐릭터를 보여줍니다."
+                        } else {
+                            "친구에게 기본 캐릭터로 표시됩니다."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Gray600,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                Switch(
+                    checked = privacy.characterVisibility == "FRIENDS",
+                    onCheckedChange = { checked ->
+                        privacySaveError = null
+                        scope.launch {
+                            val saved = store.updateCharacterVisibility(checked)
+                            if (!saved) {
+                                privacySaveError = "공개 설정 변경에 실패했습니다."
+                            }
+                        }
+                    }
+                )
+            }
         }
 
         Spacer(Modifier.height(24.dp))

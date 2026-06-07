@@ -19,7 +19,9 @@ data class FriendSearchResponse(
     val jobMonth: String?,
     val alreadyFriend: Boolean?,
     val requestStatus: String?,
-    val pendingRequestId: Long?
+    val pendingRequestId: Long?,
+    val characterVisible: Boolean?,
+    val characterAppearance: CharacterAppearanceResponse?
 )
 
 data class FriendResponse(
@@ -36,6 +38,7 @@ data class FriendResponse(
     val characterVisible: Boolean?,
     val ownedItems: List<String>?,
     val representativeItemId: String?,
+    val characterAppearance: CharacterAppearanceResponse?,
     val monthlySpendingVisible: Boolean?,
     val monthlySpending: Long?
 )
@@ -58,6 +61,7 @@ data class ComparisonUserResponse(
     val jobReason: String?,
     val jobMonth: String?,
     val characterVisible: Boolean?,
+    val characterAppearance: CharacterAppearanceResponse?,
     val monthlySpendingVisible: Boolean?,
     val spendingPrivacyStatus: String?,
     val monthlySpending: Long?,

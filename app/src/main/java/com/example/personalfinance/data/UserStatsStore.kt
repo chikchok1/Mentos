@@ -344,6 +344,16 @@ class UserStatsStore private constructor(context: Context) {
         )
     }
 
+    suspend fun updateCharacterVisibility(visibleToFriends: Boolean): Boolean {
+        val nextCharacter = if (visibleToFriends) "FRIENDS" else "PRIVATE"
+        return updatePrivacy(
+            PrivacySettings(
+                spendingVisibility = _privacyFlow.value.spendingVisibility,
+                characterVisibility = nextCharacter
+            )
+        )
+    }
+
     private suspend fun updatePrivacy(settings: PrivacySettings): Boolean {
         return try {
             val tokenManager = TokenManager(appContext)

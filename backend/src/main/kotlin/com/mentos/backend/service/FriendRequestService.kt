@@ -5,6 +5,7 @@ import com.mentos.backend.dto.FriendRequestResponse
 import com.mentos.backend.entity.Friend
 import com.mentos.backend.entity.FriendRequest
 import com.mentos.backend.entity.FriendRequestStatus
+import com.mentos.backend.entity.VisibilityScope
 import com.mentos.backend.repository.FriendRepository
 import com.mentos.backend.repository.FriendRequestRepository
 import com.mentos.backend.repository.UserRepository
@@ -16,7 +17,8 @@ import java.time.LocalDateTime
 class FriendRequestService(
     private val userRepository: UserRepository,
     private val friendRepository: FriendRepository,
-    private val friendRequestRepository: FriendRequestRepository
+    private val friendRequestRepository: FriendRequestRepository,
+    private val characterService: CharacterService
 ) {
     @Transactional
     fun create(userId: Long, req: FriendRequestCreateRequest): FriendRequestResponse {
@@ -102,6 +104,10 @@ class FriendRequestService(
         val users = userRepository.findAllById(listOf(requesterId, receiverId)).associateBy { it.id }
         val requester = users[requesterId]
         val receiver = users[receiverId]
+        val requesterVisible = requester?.characterVisibility == VisibilityScope.FRIENDS &&
+            friendRepository.existsByUserIdAndFriendId(receiverId, requesterId)
+        val receiverVisible = receiver?.characterVisibility == VisibilityScope.FRIENDS &&
+            friendRepository.existsByUserIdAndFriendId(requesterId, receiverId)
         return FriendRequestResponse(
             id = id,
             requesterId = requesterId,
@@ -110,6 +116,10 @@ class FriendRequestService(
             receiverId = receiverId,
             receiverEmail = receiver?.email,
             receiverNickname = null,
+            requesterCharacterVisible = requesterVisible,
+            requesterCharacterAppearance = if (requesterVisible) characterService.appearanceFor(requesterId) else null,
+            receiverCharacterVisible = receiverVisible,
+            receiverCharacterAppearance = if (receiverVisible) characterService.appearanceFor(receiverId) else null,
             status = status.name,
             createdAt = createdAt.toString(),
             respondedAt = respondedAt?.toString()

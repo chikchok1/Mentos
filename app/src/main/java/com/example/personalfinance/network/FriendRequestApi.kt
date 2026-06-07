@@ -18,6 +18,10 @@ data class FriendRequestResponse(
     val receiverId: Long?,
     val receiverEmail: String?,
     val receiverNickname: String?,
+    val requesterCharacterVisible: Boolean?,
+    val requesterCharacterAppearance: CharacterAppearanceResponse?,
+    val receiverCharacterVisible: Boolean?,
+    val receiverCharacterAppearance: CharacterAppearanceResponse?,
     val status: String?,
     val createdAt: String?,
     val respondedAt: String?
