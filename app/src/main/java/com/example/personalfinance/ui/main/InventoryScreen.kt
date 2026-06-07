@@ -9,236 +9,267 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
-import com.example.personalfinance.data.*
-import com.example.personalfinance.network.ApiClient
+import com.example.personalfinance.data.ShopStore
+import com.example.personalfinance.ui.components.CharacterLayerPreview
+import com.example.personalfinance.ui.components.CharacterLayerState
 import com.example.personalfinance.ui.theme.*
-import kotlinx.coroutines.launch
 
-// ── 필터 탭 정의 ──────────────────────────────────────────────────────────────
+// ── 카테고리 정의 ──────────────────────────────────────────────────────────────
 
-private sealed class InventoryFilter(val label: String) {
-    object All       : InventoryFilter("전체")
-    object Common    : InventoryFilter("Common")
-    object Rare      : InventoryFilter("Rare")
-    object Unique    : InventoryFilter("Unique")
-    object Legendary : InventoryFilter("Legendary")
+private enum class InventoryCategory(
+    val label: String,
+    val folder: String,
+) {
+    FACE("얼굴",     "faces"),
+    HAIR("헤어",     "hairs"),
+    HAT ("모자",     "hats"),
+    TOP ("상의",     "clothes"),   // filename startsWith "top"
+    BOT ("하의",     "clothes"),   // filename startsWith "bot"
+    ACC ("악세서리", "accessories"),
 }
 
-private val inventoryFilters = listOf(
-    InventoryFilter.All,
-    InventoryFilter.Common,
-    InventoryFilter.Rare,
-    InventoryFilter.Unique,
-    InventoryFilter.Legendary,
+// ── 등급 필터 정의 ────────────────────────────────────────────────────────────
+
+private sealed class GradeFilter(val label: String) {
+    object All       : GradeFilter("전체")
+    object Common    : GradeFilter("커먼")
+    object Rare      : GradeFilter("레어")
+    object Unique    : GradeFilter("유니크")
+    object Legendary : GradeFilter("레전더리")
+}
+
+private val gradeFilters = listOf(
+    GradeFilter.All,
+    GradeFilter.Common,
+    GradeFilter.Rare,
+    GradeFilter.Unique,
+    GradeFilter.Legendary,
 )
+
+// ── 등급 색상 ─────────────────────────────────────────────────────────────────
+
+private fun gradeColor(grade: String): Color = when (grade) {
+    "legendary" -> Color(0xFFE65100)
+    "unique"    -> Color(0xFF7B1FA2)
+    "rare"      -> Color(0xFF1976D2)
+    else        -> Color(0xFF9E9E9E)
+}
+
+// ── Assets 파일 목록 조회 (ShopScreen 동일 로직) ──────────────────────────────
+
+private fun listCategoryAssets(
+    context: android.content.Context,
+    category: InventoryCategory,
+): List<Triple<String, String, String>> {   // (grade, categoryFolder, filename)
+    val grades = listOf("common", "rare", "unique", "legendary")
+    val result = mutableListOf<Triple<String, String, String>>()
+    for (grade in grades) {
+        val files = runCatching {
+            context.assets.list("character_layers/$grade/${category.folder}")
+                ?.filter { it.endsWith(".png") }
+                ?.filter { file ->
+                    when (category) {
+                        InventoryCategory.TOP -> file.startsWith("top")
+                        InventoryCategory.BOT -> file.startsWith("bot")
+                        else -> true
+                    }
+                }
+                ?.sorted()
+                ?: emptyList()
+        }.getOrDefault(emptyList())
+        for (file in files) {
+            result.add(Triple(grade, category.folder, file))
+        }
+    }
+    return result
+}
 
 // ── InventoryScreen ───────────────────────────────────────────────────────────
 
 @Composable
 fun InventoryScreen(navController: NavController) {
     val context      = LocalContext.current
-    val tokenManager = remember { TokenManager(context) }
-    val gachaApi     = remember { ApiClient.getGachaApi(context, tokenManager) }
-    val scope        = rememberCoroutineScope()
+    val shopStore    = remember { ShopStore.getInstance(context) }
 
-    var isLoading        by remember { mutableStateOf(true) }
-    var ownedItemIds     by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var selectedFilter   by remember { mutableStateOf<InventoryFilter>(InventoryFilter.All) }
-    var errorMsg         by remember { mutableStateOf<String?>(null) }
+    val ownedItems   by shopStore.ownedItems.collectAsState()
 
-    // 서버에서 보유 아이템 목록 조회
+    var isLoading    by remember { mutableStateOf(true) }
+
+    var selectedCategory by remember { mutableStateOf(InventoryCategory.FACE) }
+    var selectedGrade    by remember { mutableStateOf<GradeFilter>(GradeFilter.All) }
+
+    // 화면 진입 시 서버 동기화 (실패 시 로컬 데이터로 폴백)
     LaunchedEffect(Unit) {
         try {
-            val res = gachaApi.getUserGachaState()
-            if (res.isSuccessful) {
-                val raw = res.body()?.get("ownedItems")
-                ownedItemIds = (raw as? List<*>)
-                    ?.mapNotNull { it?.toString() }
-                    ?.toSet() ?: emptySet()
-            } else {
-                errorMsg = "아이템 목록을 불러오지 못했습니다. (${res.code()})"
-            }
+            shopStore.restoreFromServer()
         } catch (e: Exception) {
-            errorMsg = "네트워크 오류: ${e.message}"
+            // 네트워크 오류 등은 무시하고 로컬 데이터로 동작
+            android.util.Log.w("InventoryScreen", "서버 동기화 실패 (로컬 폴백): ${e.message}")
         } finally {
             isLoading = false
         }
     }
 
-    // 필터 적용
-    val filteredAll = remember(selectedFilter) {
-        GachaItemPool.all.filter { item ->
-            when (selectedFilter) {
-                InventoryFilter.All       -> true
-                InventoryFilter.Common    -> item.grade == GachaGrade.COMMON
-                InventoryFilter.Rare      -> item.grade == GachaGrade.RARE
-                InventoryFilter.Unique    -> item.grade == GachaGrade.UNIQUE
-                InventoryFilter.Legendary -> item.grade == GachaGrade.LEGENDARY
-            }
-        }
+    // 카테고리 내 전체 아이템 목록
+    val categoryAssets = remember(selectedCategory) {
+        listCategoryAssets(context, selectedCategory)
     }
 
-    val ownedCount = ownedItemIds.size
-    val totalCount = GachaItemPool.all.size
+    // 보유 + 등급 필터 적용
+    val displayItems = remember(categoryAssets, ownedItems, selectedGrade) {
+        categoryAssets.filter { (grade, folder, filename) ->
+            val itemId = "$grade/$folder/$filename"
+            val owned = ownedItems.contains(itemId)
+            val gradeMatch = when (selectedGrade) {
+                GradeFilter.All       -> true
+                GradeFilter.Common    -> grade == "common"
+                GradeFilter.Rare      -> grade == "rare"
+                GradeFilter.Unique    -> grade == "unique"
+                GradeFilter.Legendary -> grade == "legendary"
+            }
+            owned && gradeMatch
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color.White, Gray50)))
+            .background(Color(0xFFF7F7F9))
     ) {
         // ── 상단 헤더 ──────────────────────────────────────────────────────────
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment     = Alignment.CenterVertically,
+                .background(Color.White)
         ) {
-            IconButton(onClick = { navController.popBackStack() }) {
-                Icon(Icons.Rounded.ArrowBackIosNew, contentDescription = "뒤로", tint = Gray600)
-            }
-            Text(
-                text       = "인벤토리",
-                style      = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            // 보유 개수 뱃지
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Brush.horizontalGradient(listOf(Blue50, Purple50)))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.Rounded.ArrowBackIosNew, contentDescription = "뒤로", tint = Gray600)
+                }
                 Text(
-                    text       = "$ownedCount / $totalCount",
-                    style      = MaterialTheme.typography.labelMedium,
+                    text       = "인벤토리",
+                    style      = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color      = Blue500,
                 )
+                // 보유 수량 뱃지
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFFF4F3FE))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text       = "보유 ${ownedItems.size}개",
+                        style      = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color      = Color(0xFF534AB7),
+                    )
+                }
+            }
+
+            HorizontalDivider(color = Color(0xFFEEEEEE))
+
+            // ── 카테고리 탭 ───────────────────────────────────────────────────
+            val tabIndex = InventoryCategory.entries.indexOf(selectedCategory)
+            ScrollableTabRow(
+                selectedTabIndex = tabIndex,
+                containerColor   = Color.White,
+                contentColor     = Color(0xFF534AB7),
+                edgePadding      = 12.dp,
+                indicator        = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[tabIndex]),
+                        color    = Color(0xFF534AB7),
+                    )
+                },
+                divider = {},
+            ) {
+                InventoryCategory.entries.forEach { cat ->
+                    Tab(
+                        selected               = selectedCategory == cat,
+                        onClick                = {
+                            selectedCategory = cat
+                            selectedGrade    = GradeFilter.All
+                        },
+                        selectedContentColor   = Color(0xFF534AB7),
+                        unselectedContentColor = Color(0xFF888888),
+                        text = {
+                            Text(
+                                text       = cat.label,
+                                fontSize   = 13.sp,
+                                fontWeight = if (selectedCategory == cat) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                        },
+                    )
+                }
             }
         }
-        HorizontalDivider(color = Gray100)
 
         if (isLoading) {
             // ── 로딩 ──────────────────────────────────────────────────────────
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
-                    color      = Blue500,
-                    modifier   = Modifier.size(36.dp),
+                    color       = Color(0xFF534AB7),
+                    modifier    = Modifier.size(36.dp),
                     strokeWidth = 3.dp,
                 )
-            }
-        } else if (errorMsg != null) {
-            // ── 에러 ──────────────────────────────────────────────────────────
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFFE4E6)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector        = Icons.Rounded.WifiOff,
-                            contentDescription = null,
-                            tint               = Color(0xFFDC2626),
-                            modifier           = Modifier.size(32.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text       = "불러오기 실패",
-                        style      = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color      = Gray700,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text      = errorMsg!!,
-                        color     = Gray400,
-                        style     = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.height(20.dp))
-                    Button(
-                        onClick = {
-                            errorMsg = null
-                            isLoading = true
-                            scope.launch {
-                                try {
-                                    val res = gachaApi.getUserGachaState()
-                                    if (res.isSuccessful) {
-                                        val raw = res.body()?.get("ownedItems")
-                                        ownedItemIds = (raw as? List<*>)
-                                            ?.mapNotNull { it?.toString() }
-                                            ?.toSet() ?: emptySet()
-                                    } else {
-                                        errorMsg = "아이템 목록을 불러오지 못했습니다. (${res.code()})"
-                                    }
-                                } catch (e: Exception) {
-                                    errorMsg = "네트워크 오류: ${e.message}"
-                                } finally {
-                                    isLoading = false
-                                }
-                            }
-                        },
-                        shape  = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Blue500,
-                            contentColor   = Color.White,
-                        ),
-                        modifier = Modifier.height(48.dp),
-                    ) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("다시 시도", fontWeight = FontWeight.SemiBold)
-                    }
-                }
             }
         } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp)
+                    .padding(horizontal = 14.dp)
             ) {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(14.dp))
 
-                // ── 등급 필터 탭 ──────────────────────────────────────────────
-                GradeFilterTabs(
-                    filters        = inventoryFilters,
-                    selectedFilter = selectedFilter,
-                    onSelect       = { selectedFilter = it },
+                // ── 등급 필터 칩 ──────────────────────────────────────────────
+                GradeFilterChips(
+                    selectedGrade = selectedGrade,
+                    onSelect      = { selectedGrade = it },
                 )
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(14.dp))
 
                 // ── 아이템 그리드 ─────────────────────────────────────────────
-                if (ownedItemIds.isEmpty() && selectedFilter == InventoryFilter.All) {
-                    EmptyInventory()
+                if (displayItems.isEmpty()) {
+                    EmptyCategoryView(category = selectedCategory, gradeFilter = selectedGrade)
                 } else {
                     LazyVerticalGrid(
                         columns               = GridCells.Fixed(3),
-                        verticalArrangement   = Arrangement.spacedBy(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement   = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding        = PaddingValues(bottom = 32.dp),
-                        modifier              = Modifier.weight(1f),
+                        modifier              = Modifier.fillMaxSize(),
                     ) {
-                        items(filteredAll) { item ->
-                            val owned = item.id in ownedItemIds
-                            InventoryItemCard(item = item, owned = owned)
+                        items(
+                            items = displayItems,
+                            key   = { (grade, folder, file) -> "$grade/$folder/$file" },
+                        ) { (grade, folder, filename) ->
+                            InventoryItemCard(
+                                grade    = grade,
+                                folder   = folder,
+                                filename = filename,
+                                category = selectedCategory,
+                            )
                         }
                     }
                 }
@@ -247,37 +278,34 @@ fun InventoryScreen(navController: NavController) {
     }
 }
 
-// ── 등급 필터 탭 ─────────────────────────────────────────────────────────────
+// ── 등급 필터 칩 ──────────────────────────────────────────────────────────────
+
+private val gradeFilterColors = mapOf(
+    "전체"      to Color(0xFF534AB7),
+    "커먼"      to Color(0xFF9E9E9E),
+    "레어"      to Color(0xFF1976D2),
+    "유니크"    to Color(0xFF7B1FA2),
+    "레전더리"  to Color(0xFFE65100),
+)
 
 @Composable
-private fun GradeFilterTabs(
-    filters: List<InventoryFilter>,
-    selectedFilter: InventoryFilter,
-    onSelect: (InventoryFilter) -> Unit,
+private fun GradeFilterChips(
+    selectedGrade: GradeFilter,
+    onSelect: (GradeFilter) -> Unit,
 ) {
-    val gradeColorMap = mapOf(
-        "전체"      to Blue500,
-        "Common"    to Color(0xFF9E9E9E),
-        "Rare"      to Color(0xFF1976D2),
-        "Unique"    to Color(0xFF7B1FA2),
-        "Legendary" to Color(0xFFE65100),
-    )
-
     Row(
         modifier              = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        filters.forEach { filter ->
-            val isSelected = filter == selectedFilter
-            val color = gradeColorMap[filter.label] ?: Gray500
+        gradeFilters.forEach { filter ->
+            val isSelected = filter == selectedGrade
+            val color = gradeFilterColors[filter.label] ?: Color(0xFF534AB7)
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        if (isSelected) color else color.copy(alpha = 0.08f)
-                    )
+                    .background(if (isSelected) color else color.copy(alpha = 0.08f))
                     .clickable { onSelect(filter) }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
@@ -296,116 +324,98 @@ private fun GradeFilterTabs(
 // ── 아이템 카드 ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun InventoryItemCard(item: GachaItem, owned: Boolean) {
-    val gradeColors = item.grade.gradientColors.map { Color(it) }
+private fun InventoryItemCard(
+    grade: String,
+    folder: String,
+    filename: String,
+    category: InventoryCategory,
+) {
+    val accent = gradeColor(grade)
 
-    val infiniteTransition = rememberInfiniteTransition(label = "itemGlow")
-    val glowScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue  = if (owned) 1.03f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation  = tween(1800, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "scale",
-    )
+    val thumbState = remember(grade, folder, filename) {
+        when (category) {
+            InventoryCategory.FACE -> CharacterLayerState(face       = filename)
+            InventoryCategory.HAIR -> CharacterLayerState(hair       = filename)
+            InventoryCategory.HAT  -> CharacterLayerState(hat        = filename)
+            InventoryCategory.TOP  -> CharacterLayerState(topClothes = filename)
+            InventoryCategory.BOT  -> CharacterLayerState(botClothes = filename)
+            InventoryCategory.ACC  -> CharacterLayerState(accessory  = filename)
+        }
+    }
+
+    val gradeBadgeLabel = when (grade) {
+        "legendary" -> "L"
+        "unique"    -> "U"
+        "rare"      -> "R"
+        else        -> "C"
+    }
 
     Card(
-        shape     = RoundedCornerShape(16.dp),
+        shape     = RoundedCornerShape(14.dp),
         colors    = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (owned) 3.dp else 0.dp),
-        border    = if (owned)
-            BorderStroke(1.5.dp, Brush.linearGradient(gradeColors))
-        else
-            BorderStroke(1.dp, Gray100),
-        modifier  = Modifier
-            .fillMaxWidth()
-            .scale(if (owned) glowScale else 1f),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border    = BorderStroke(1.5.dp, accent.copy(alpha = 0.35f)),
+        modifier  = Modifier.fillMaxWidth(),
     ) {
         Column(
             modifier            = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // 이미지 영역
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (owned)
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    gradeColors.first().copy(alpha = 0.15f),
-                                    gradeColors.last().copy(alpha = 0.05f)
-                                )
-                            )
-                        else
-                            Brush.radialGradient(
-                                colors = listOf(Gray50, Gray100)
-                            )
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFF4F3FE))
+                    .border(
+                        width  = if (grade == "common") 0.dp else 1.5.dp,
+                        color  = accent,
+                        shape  = RoundedCornerShape(10.dp),
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (owned) {
-                    Image(
-                        painter            = painterResource(id = item.drawableResId),
-                        contentDescription = item.name,
-                        modifier           = Modifier.size(56.dp),
-                    )
-                } else {
-                    Icon(
-                        imageVector        = Icons.Rounded.Lock,
-                        contentDescription = "미보유",
-                        tint               = Gray200,
-                        modifier           = Modifier.size(28.dp),
-                    )
-                }
+                CharacterLayerPreview(
+                    layerState = thumbState,
+                    size       = maxWidth * 1.3f,
+                )
             }
 
             Spacer(Modifier.height(6.dp))
 
-            // 등급 뱃지
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(
-                        if (owned)
-                            Brush.horizontalGradient(gradeColors)
-                        else
-                            Brush.horizontalGradient(listOf(Gray200, Gray200))
-                    )
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                contentAlignment = Alignment.Center,
+            // 등급 뱃지 + 이름
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier          = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text  = item.grade.displayName.take(1),
-                    color = if (owned) Color.White else Gray400,
-                    style = MaterialTheme.typography.labelSmall,
+                    text       = gradeBadgeLabel,
+                    fontSize   = 8.sp,
                     fontWeight = FontWeight.Bold,
+                    color      = Color.White,
+                    modifier   = Modifier
+                        .background(accent, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text     = ItemNames.display(filename),
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color    = Color(0xFF333333),
                 )
             }
-
-            Spacer(Modifier.height(4.dp))
-
-            // 아이템 이름
-            Text(
-                text      = if (owned) item.name else "???",
-                style     = MaterialTheme.typography.labelSmall,
-                color     = if (owned) Gray700 else Gray400,
-                textAlign = TextAlign.Center,
-                maxLines  = 2,
-            )
         }
     }
 }
 
-// ── 빈 인벤토리 ──────────────────────────────────────────────────────────────
+// ── 빈 카테고리 뷰 ────────────────────────────────────────────────────────────
 
 @Composable
-private fun EmptyInventory() {
+private fun EmptyCategoryView(category: InventoryCategory, gradeFilter: GradeFilter) {
     val infiniteTransition = rememberInfiniteTransition(label = "emptyFloat")
     val floatY by infiniteTransition.animateFloat(
         initialValue  = 0f,
@@ -414,7 +424,7 @@ private fun EmptyInventory() {
             animation  = tween(2000, easing = EaseInOutSine),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "floatAnim",
+        label = "float",
     )
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -422,26 +432,25 @@ private fun EmptyInventory() {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier            = Modifier.padding(bottom = 80.dp),
         ) {
-            // 아이콘 일러스트
             Box(
                 modifier = Modifier
                     .offset(y = floatY.dp)
-                    .size(96.dp)
+                    .size(88.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
-                            colors = listOf(Blue50, Purple50)
+                            colors = listOf(Color(0xFFDEDCFD), Color(0xFFEEEDFE))
                         )
                     ),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .size(60.dp)
+                        .clip(RoundedCornerShape(18.dp))
                         .background(
                             Brush.linearGradient(
-                                listOf(Blue500, Purple500)
+                                listOf(Color(0xFF534AB7), Color(0xFF9C6FE4))
                             )
                         ),
                     contentAlignment = Alignment.Center,
@@ -450,26 +459,32 @@ private fun EmptyInventory() {
                         imageVector        = Icons.Rounded.Inventory2,
                         contentDescription = null,
                         tint               = Color.White,
-                        modifier           = Modifier.size(32.dp),
+                        modifier           = Modifier.size(30.dp),
                     )
                 }
             }
 
             Spacer(Modifier.height(24.dp))
 
+            val msg = if (gradeFilter == GradeFilter.All) {
+                "${category.label} 카테고리에\n보유한 아이템이 없어요"
+            } else {
+                "${category.label} · ${gradeFilter.label} 등급\n보유한 아이템이 없어요"
+            }
             Text(
-                text       = "아직 아이템이 없어요",
+                text       = msg,
                 style      = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color      = Gray700,
+                textAlign  = TextAlign.Center,
+                lineHeight = 26.sp,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text      = "가챠를 돌려서\n첫 번째 아이템을 모아보세요",
+                text      = "상점에서 아이템을 구매해보세요",
                 style     = MaterialTheme.typography.bodyMedium,
                 color     = Gray400,
                 textAlign = TextAlign.Center,
-                lineHeight = 22.sp,
             )
         }
     }

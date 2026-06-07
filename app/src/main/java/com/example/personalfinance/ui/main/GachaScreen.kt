@@ -35,6 +35,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.example.personalfinance.data.*
 import com.example.personalfinance.network.ApiClient
+import com.example.personalfinance.ui.components.CharacterLayerPreview
+import com.example.personalfinance.ui.components.CharacterLayerState
 import com.example.personalfinance.ui.main.animation.CapsuleOpeningAnimation
 import com.example.personalfinance.ui.theme.*
 import kotlinx.coroutines.delay
@@ -43,6 +45,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
+import android.util.Log
 
 // ── 캡슐머신 카드 데이터 ──────────────────────────────────────────────────────────
 
@@ -61,6 +64,7 @@ private data class CapsuleMachineData(
 fun GachaScreen(navController: NavController) {
     val context        = LocalContext.current
     val gachaStore     = remember { GachaStore(context) }
+    val shopStore      = remember { ShopStore.getInstance(context) }
     val coroutineScope = rememberCoroutineScope()
     val tokenManager   = remember { TokenManager(context) }
     val gachaApi       = remember { ApiClient.getGachaApi(context, tokenManager) }
@@ -246,17 +250,31 @@ fun GachaScreen(navController: NavController) {
                                             val isDup      = body?.get("isDuplicate") as? Boolean ?: false
                                             val coinRew    = (body?.get("coinReward") as? Number)?.toInt() ?: 0
                                             val totalCoins = (body?.get("totalCoins") as? Number)?.toInt() ?: 0
-                                            if (itemId != null) {
-                                                val item = GachaItemPool.findById(itemId)
-                                                if (item != null) {
-                                                    gachaResult = if (isDup)
-                                                        GachaResult.DuplicateCoin(item, coinRew)
-                                                    else
-                                                        GachaResult.NewItem(item)
-                                                    coins          = totalCoins
-                                                    attendanceUsed = true
-                                                    showResultDialog = true
+                                            if (!itemId.isNullOrBlank()) {
+                                                val grade = gradeFromItemId(itemId)
+                                                val item  = GachaItem(
+                                                    id    = itemId,
+                                                    name  = itemId.substringAfterLast("/").removeSuffix(".png"),
+                                                    grade = grade,
+                                                )
+                                                // 신규 아이템이면 로컬 ShopStore에 저장 (앱 재설치 시 서버에서 복원)
+                                                if (!isDup) {
+                                                    val parts = itemId.split("/")
+                                                    if (parts.size >= 3) {
+                                                        val folder   = "${parts[0]}/${parts[1]}"
+                                                        val filename = parts.drop(2).joinToString("/")
+                                                        shopStore.addOwned(folder, filename)
+                                                    } else {
+                                                        Log.w("GachaScreen", "예상치 못한 itemId 형식: $itemId")
+                                                    }
                                                 }
+                                                gachaResult = if (isDup)
+                                                    GachaResult.DuplicateCoin(item, coinRew)
+                                                else
+                                                    GachaResult.NewItem(item)
+                                                coins          = totalCoins
+                                                attendanceUsed = true
+                                                showResultDialog = true
                                             }
                                         } else {
                                             android.widget.Toast.makeText(context, "오류가 발생했습니다.", android.widget.Toast.LENGTH_SHORT).show()
@@ -277,16 +295,30 @@ fun GachaScreen(navController: NavController) {
                                             val isDup      = body?.get("isDuplicate") as? Boolean ?: false
                                             val coinRew    = (body?.get("coinReward") as? Number)?.toInt() ?: 0
                                             val totalCoins = (body?.get("totalCoins") as? Number)?.toInt() ?: 0
-                                            if (itemId != null) {
-                                                val item = GachaItemPool.findById(itemId)
-                                                if (item != null) {
-                                                    gachaResult = if (isDup)
-                                                        GachaResult.DuplicateCoin(item, coinRew)
-                                                    else
-                                                        GachaResult.NewItem(item)
-                                                    coins           = totalCoins
-                                                    showResultDialog = true
+                                            if (!itemId.isNullOrBlank()) {
+                                                val grade = gradeFromItemId(itemId)
+                                                val item  = GachaItem(
+                                                    id    = itemId,
+                                                    name  = itemId.substringAfterLast("/").removeSuffix(".png"),
+                                                    grade = grade,
+                                                )
+                                                // 신규 아이템이면 로컬 ShopStore에 저장 (앱 재설치 시 서버에서 복원)
+                                                if (!isDup) {
+                                                    val parts = itemId.split("/")
+                                                    if (parts.size >= 3) {
+                                                        val folder   = "${parts[0]}/${parts[1]}"
+                                                        val filename = parts.drop(2).joinToString("/")
+                                                        shopStore.addOwned(folder, filename)
+                                                    } else {
+                                                        Log.w("GachaScreen", "예상치 못한 itemId 형식: $itemId")
+                                                    }
                                                 }
+                                                gachaResult = if (isDup)
+                                                    GachaResult.DuplicateCoin(item, coinRew)
+                                                else
+                                                    GachaResult.NewItem(item)
+                                                coins           = totalCoins
+                                                showResultDialog = true
                                             }
                                         } else {
                                             val errBody = response.errorBody()?.string() ?: ""
@@ -955,10 +987,10 @@ private fun CinematicGachaReveal(
                             },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Image(
-                            painter            = painterResource(id = item.drawableResId),
-                            contentDescription = item.name,
-                            modifier           = Modifier.size(68.dp),
+                        val layerState = remember(item.id) { itemIdToLayerState(item.id) }
+                        CharacterLayerPreview(
+                            layerState = layerState,
+                            size       = 68.dp,
                         )
                     }
                 }
@@ -1330,4 +1362,24 @@ private fun DrawScope.drawCapsuleMachine(color: Color, alpha: Float) {
         radius = r(5f),
         center = Offset(x(95f), y(70f)),
     )
+}
+
+// ── itemId → CharacterLayerState 변환 ─────────────────────────────────────────
+
+private fun itemIdToLayerState(itemId: String): CharacterLayerState {
+    val parts = itemId.split("/")
+    if (parts.size < 3) return CharacterLayerState()
+    val category = parts[1]
+    val filename = parts.drop(2).joinToString("/")
+    return when (category) {
+        "faces"       -> CharacterLayerState(face      = filename)
+        "hairs"       -> CharacterLayerState(hair      = filename)
+        "hats"        -> CharacterLayerState(hat       = filename)
+        "accessories" -> CharacterLayerState(accessory = filename)
+        "clothes"     -> if (filename.startsWith("top"))
+            CharacterLayerState(topClothes = filename)
+        else
+            CharacterLayerState(botClothes = filename)
+        else          -> CharacterLayerState()
+    }
 }

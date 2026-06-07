@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,11 +37,35 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.personalfinance.data.GachaGrade
 import com.example.personalfinance.data.GachaItem
 import com.example.personalfinance.data.GachaResult
+import com.example.personalfinance.ui.components.CharacterLayerPreview
+import com.example.personalfinance.ui.components.CharacterLayerState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+
+// ── itemId → CharacterLayerState 변환 ─────────────────────────────────────────
+// itemId 형식: "grade/categoryFolder/filename"
+// 예: "common/clothes/top3_red_check_shirt.png"
+
+private fun itemIdToLayerState(itemId: String): CharacterLayerState {
+    val parts = itemId.split("/")
+    if (parts.size < 3) return CharacterLayerState()
+    val category = parts[1]   // faces, hairs, hats, clothes, accessories
+    val filename = parts.drop(2).joinToString("/")
+    return when (category) {
+        "faces"       -> CharacterLayerState(face      = filename)
+        "hairs"       -> CharacterLayerState(hair      = filename)
+        "hats"        -> CharacterLayerState(hat       = filename)
+        "accessories" -> CharacterLayerState(accessory = filename)
+        "clothes"     -> if (filename.startsWith("top"))
+                            CharacterLayerState(topClothes = filename)
+                         else
+                            CharacterLayerState(botClothes = filename)
+        else          -> CharacterLayerState()
+    }
+}
 
 // ── 희귀도 테마 ──────────────────────────────────────────────────────────────
 
@@ -408,10 +431,10 @@ fun CapsuleOpeningAnimation(
                             .background(Brush.radialGradient(listOf(theme.lidLight.copy(0.30f), theme.bodyDark.copy(0.65f)))),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Image(
-                            painter            = painterResource(id = item.drawableResId),
-                            contentDescription = item.name,
-                            modifier           = Modifier.size(135.dp).padding(8.dp),
+                        val layerState = remember(item.id) { itemIdToLayerState(item.id) }
+                        CharacterLayerPreview(
+                            layerState = layerState,
+                            size       = 155.dp,
                         )
                     }
 
