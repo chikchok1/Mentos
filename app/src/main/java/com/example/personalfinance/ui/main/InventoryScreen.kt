@@ -106,17 +106,17 @@ fun InventoryScreen(navController: NavController) {
     val ownedItems   by shopStore.ownedItems.collectAsState()
 
     var isLoading    by remember { mutableStateOf(true) }
-    var errorMsg     by remember { mutableStateOf<String?>(null) }
 
     var selectedCategory by remember { mutableStateOf(InventoryCategory.FACE) }
     var selectedGrade    by remember { mutableStateOf<GradeFilter>(GradeFilter.All) }
 
-    // 화면 진입 시 서버 동기화
+    // 화면 진입 시 서버 동기화 (실패 시 로컬 데이터로 폴백)
     LaunchedEffect(Unit) {
         try {
             shopStore.restoreFromServer()
         } catch (e: Exception) {
-            errorMsg = "서버 동기화 실패: ${e.message}"
+            // 네트워크 오류 등은 무시하고 로컬 데이터로 동작
+            android.util.Log.w("InventoryScreen", "서버 동기화 실패 (로컬 폴백): ${e.message}")
         } finally {
             isLoading = false
         }
@@ -232,40 +232,6 @@ fun InventoryScreen(navController: NavController) {
                     modifier    = Modifier.size(36.dp),
                     strokeWidth = 3.dp,
                 )
-            }
-        } else if (errorMsg != null) {
-            // ── 에러 ──────────────────────────────────────────────────────────
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFFE4E6)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector        = Icons.Rounded.WifiOff,
-                            contentDescription = null,
-                            tint               = Color(0xFFDC2626),
-                            modifier           = Modifier.size(32.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text       = "불러오기 실패",
-                        style      = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color      = Gray700,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text      = errorMsg!!,
-                        color     = Gray400,
-                        style     = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                    )
-                }
             }
         } else {
             Column(

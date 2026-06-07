@@ -1,29 +1,15 @@
 package com.example.personalfinance.data
 
 import android.content.Context
-import android.util.Log
-import com.example.personalfinance.network.ApiClient
-import com.example.personalfinance.network.PurchaseItemRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * 상점 구매 결과를 나타내는 sealed class.
- */
-sealed class PurchaseResult {
-    data class Success(val displayName: String) : PurchaseResult()
-    object AlreadyOwned : PurchaseResult()
-    object InsufficientCoins : PurchaseResult()
-    data class Error(val message: String) : PurchaseResult()
-}
-
 class ShopStore private constructor(context: Context) {
 
-    private val appContext = context.applicationContext
-    private val prefs = appContext.getSharedPreferences("shop_store", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("shop_store", Context.MODE_PRIVATE)
 
-    // ── 코인 ──────────────────────────────────────────────────────────────────
+    // 코인
     private val _coins = MutableStateFlow(prefs.getInt("coins", 1200))
     val coins: StateFlow<Int> = _coins.asStateFlow()
 
@@ -41,12 +27,7 @@ class ShopStore private constructor(context: Context) {
         _coins.value = newVal
     }
 
-    private fun setCoins(amount: Int) {
-        prefs.edit().putInt("coins", amount).apply()
-        _coins.value = amount
-    }
-
-    // ── 보유 아이템 ("folder/filename" 형식) ──────────────────────────────────
+    // 보유 아이템 ("folder/filename" 형식)
     private fun loadOwned(): MutableSet<String> =
         prefs.getStringSet("owned_items", emptySet())!!.toMutableSet()
 
@@ -63,9 +44,18 @@ class ShopStore private constructor(context: Context) {
     }
 
     private fun setOwnedItems(items: Collection<String>) {
-        val updated = items.toMutableSet()
-        prefs.edit().putStringSet("owned_items", updated).apply()
-        _ownedItems.value = updated
+        // 구형 가챠 아이템(leather/iron/golden/diamond 접두사)은 저장에서 제외
+        val filtered = items.filterNot { isLegacyGachaItem(it) }.toMutableSet()
+        prefs.edit().putStringSet("owned_items", filtered).apply()
+        _ownedItems.value = filtered
+    }
+
+    /** 구형 GachaItemPool 아이템 ID 판별 (common_leather_, rare_iron_ 등) */
+    private fun isLegacyGachaItem(itemId: String): Boolean {
+        val legacyPrefixes = listOf(
+            "common_leather_", "rare_iron_", "unique_golden_", "legendary_diamond_"
+        )
+        return legacyPrefixes.any { itemId.startsWith(it) }
     }
 
     // ── 서버 연동 구매 ────────────────────────────────────────────────────────
@@ -172,18 +162,48 @@ class ShopStore private constructor(context: Context) {
 
     fun isNew(filename: String) = newItems.contains(filename)
 
-    // ── 아이템 가격 (등급별 고정 가격) ────────────────────────────────────────
-    fun priceOf(grade: String): Int = when (grade) {
-        "legendary" -> 1000
-        "unique"    -> 500
-        "rare"      -> 300
-        "common"    -> 100
-        else        -> 150
-    }
+    // 아이템 가격
+    private val priceMap: Map<String, Int> = mapOf(
+        "h_afro_blue.png" to 120,
+        "h_dandy.png" to 150,
+        "h_half_brown.png" to 140,
+        "h_long_blonde.png" to 220,
+        "h_messy_brown.png" to 130,
+        "h_pony_green.png" to 160,
+        "h_short_silver.png" to 180,
+        "h_slick_pink.png" to 170,
+        "h_sports_red.png" to 150,
+        "h_twin_purple.png" to 200,
+        "t_beanie.png" to 120,
+        "t_cap.png" to 100,
+        "t_cat_ears.png" to 200,
+        "t_crown.png" to 500,
+        "t_halo.png" to 300,
+        "t_hard_hat.png" to 150,
+        "t_headband_blue.png" to 130,
+        "t_ribbon_red.png" to 140,
+        "t_straw_hat.png" to 160,
+        "t_wizard_hat.png" to 250,
+        "a_band.png" to 100,
+        "a_blush.png" to 80,
+        "a_candy.png" to 90,
+        "a_eyepatch.png" to 150,
+        "a_freckles.png" to 110,
+        "a_glasses.png" to 120,
+        "a_headset.png" to 200,
+        "a_mask.png" to 130,
+        "a_sleep.png" to 90,
+        "a_sunglasses.png" to 140
+    )
+
+    fun priceOf(filename: String): Int =
+        priceMap[filename] ?: when {
+            filename.startsWith("top") -> 180
+            filename.startsWith("bot") -> 130
+            else -> 150
+        }
 
     companion object {
-        private const val TAG = "ShopStore"
-
         @Volatile private var instance: ShopStore? = null
         fun getInstance(context: Context): ShopStore =
             instance ?: synchronized(this) {
