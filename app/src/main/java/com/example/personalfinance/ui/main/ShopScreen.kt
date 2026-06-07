@@ -177,9 +177,7 @@ fun ShopScreen(navController: NavController) {
             )
             when (result) {
                 is PurchaseResult.Success -> {
-                    // 구매 성공 시 해당 아이템 장착
-                    appearanceStore.save(equipped.withItem(item))
-                    snackbar.showSnackbar("${item.displayName} 구매 & 장착 완료!")
+                    snackbar.showSnackbar("${item.displayName} 구매 완료!")
                 }
                 is PurchaseResult.AlreadyOwned -> {
                     snackbar.showSnackbar("이미 보유 중인 아이템이에요")
@@ -192,11 +190,6 @@ fun ShopScreen(navController: NavController) {
                 }
             }
         }
-    }
-
-    fun handleEquip(item: ShopItem) {
-        appearanceStore.save(equipped.withItem(item))
-        coroutine.launch { snackbar.showSnackbar("${item.displayName} 장착 완료!") }
     }
 
     Scaffold(
@@ -346,7 +339,6 @@ fun ShopScreen(navController: NavController) {
                         isEquipped = isEquipped,
                         onClick    = { selectedItem = item },
                         onBuy      = { handleBuy(item) },
-                        onEquip    = { handleEquip(item) },
                     )
                 }
             }
@@ -366,7 +358,6 @@ private fun ShopItemCard(
     isEquipped: Boolean,
     onClick: () -> Unit,
     onBuy: () -> Unit,
-    onEquip: () -> Unit,
 ) {
     val borderColor = when {
         isSelected -> Color(0xFF534AB7)
@@ -431,17 +422,6 @@ private fun ShopItemCard(
                             .background(Color(0xFFD4F0E7), RoundedCornerShape(6.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp)
                     )
-                }
-                isOwned && isSelected -> {
-                    Button(
-                        onClick        = onEquip,
-                        modifier       = Modifier.fillMaxWidth().height(26.dp),
-                        shape          = RoundedCornerShape(8.dp),
-                        colors         = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D9E75)),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                    ) {
-                        Text("장착", fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
-                    }
                 }
                 isOwned -> {
                     Text(
