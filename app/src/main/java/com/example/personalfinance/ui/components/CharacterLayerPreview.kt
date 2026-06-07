@@ -130,14 +130,24 @@ fun CharacterLayerPreview(
     val context = LocalContext.current
 
     val layerPaths = remember(layerState) {
+        val grades = listOf("common", "rare", "unique", "legendary")
+        fun resolve(category: String, file: String): String {
+            for (g in grades) {
+                val path = "character_layers/$g/$category/$file"
+                val items = runCatching { context.assets.list("character_layers/$g/$category") }.getOrNull()
+                if (items?.contains(file) == true) return path
+            }
+            return "character_layers/$category/$file"
+        }
+
         listOfNotNull(
             "character_layers/base/base_body.png",
-            layerState.botClothes?.let  { "character_layers/clothes/$it"     },
-            layerState.topClothes?.let  { "character_layers/clothes/$it"     },
-            layerState.hair?.let        { "character_layers/hairs/$it"       },
-            layerState.hat?.let         { "character_layers/hats/$it"        },
-            layerState.face?.let        { "character_layers/faces/$it"       },
-            layerState.accessory?.let   { "character_layers/accessories/$it" },
+            layerState.botClothes?.let  { resolve("clothes", it) },
+            layerState.topClothes?.let  { resolve("clothes", it) },
+            layerState.hair?.let        { resolve("hairs", it) },
+            layerState.hat?.let         { resolve("hats", it) },
+            layerState.face?.let        { resolve("faces", it) },
+            layerState.accessory?.let   { resolve("accessories", it) },
         )
     }
 
@@ -176,10 +186,22 @@ fun CharacterLayerPreview(
     val context = LocalContext.current
 
     val layerPaths = remember(facePath, extraLayers) {
+        val grades = listOf("common", "rare", "unique", "legendary")
+        fun resolve(path: String): String {
+            val parts = path.split("/")
+            if (parts.size != 2) return "character_layers/$path"
+            val (cat, file) = parts
+            for (g in grades) {
+                val items = runCatching { context.assets.list("character_layers/$g/$cat") }.getOrNull()
+                if (items?.contains(file) == true) return "character_layers/$g/$cat/$file"
+            }
+            return "character_layers/$path"
+        }
+
         buildList {
             add("character_layers/base/base_body.png")
-            add("character_layers/$facePath")
-            extraLayers.forEach { add("character_layers/$it") }
+            add(resolve(facePath))
+            extraLayers.forEach { add(resolve(it)) }
         }
     }
 

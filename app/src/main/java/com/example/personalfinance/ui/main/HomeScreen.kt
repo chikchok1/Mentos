@@ -21,7 +21,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.personalfinance.data.CharacterAppearanceStore
 import com.example.personalfinance.data.UserStatsCalculator
@@ -30,6 +32,9 @@ import com.example.personalfinance.ui.components.CharacterLayerPreview
 import com.example.personalfinance.ui.theme.*
 import java.time.YearMonth
 import java.time.LocalDateTime
+import kotlinx.coroutines.delay
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 @Composable
 fun HomeScreen(navController: NavController) {
@@ -37,6 +42,10 @@ fun HomeScreen(navController: NavController) {
     val store = remember { com.example.personalfinance.data.UserStatsStore.getInstance(context) }
     val userStats by store.statsFlow.collectAsState()
     val nickname  by store.nicknameFlow.collectAsState()
+
+    LaunchedEffect(Unit) {
+        store.refreshServerStats()
+    }
 
     val currentLevel      = userStats.currentLevel
     val currentXP         = userStats.currentXP
@@ -59,10 +68,22 @@ fun HomeScreen(navController: NavController) {
         if (lastSum == 0L) null
         else ((thisSum - lastSum).toFloat() / lastSum * 100).toInt()
     }
-    val topCategory  = userStats.topCategory
-    val currentJob   = UserStatsCalculator.determineJob(userStats.categorySpending)
-    val jobTitle     = UserStatsCalculator.jobTitle(currentJob)
-    val levelTitle   = UserStatsCalculator.levelTitle(currentLevel)
+    val topCategory = userStats.topCategory
+    val currentJob  = userStats.job
+    val jobTitle    = UserStatsCalculator.jobTitle(currentJob)
+    val levelTitle  = UserStatsCalculator.levelTitle(currentLevel)
+    val jobReason   = userStats.jobReason
+
+    // 직업 이유 팝업
+    var showJobDialog by remember { mutableStateOf(false) }
+
+    // 직업 변경 토스트
+    var jobChangedMessage by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        store.jobChangedFlow.collect { newJobTitle ->
+            jobChangedMessage = "${newJobTitle}이(가) 되었어요!"
+        }
+    }
 
     val appearanceStore = remember { CharacterAppearanceStore.getInstance(context) }
     val characterAppearance by appearanceStore.appearanceFlow.collectAsState()
@@ -75,6 +96,140 @@ fun HomeScreen(navController: NavController) {
         systemBarsInsets.getBottom(this).toDp()
     }
     val navBarHeight = 88.dp + bottomInset
+
+    // ── 직업 이유 다이얼로그 ──────────────────────────────────────────────────
+    if (showJobDialog) {
+        val jobEmoji = when (currentJob) {
+            "cook"     -> "🍳"
+            "manager"  -> "🏠"
+            "merchant" -> "🛍️"
+            "artist"   -> "🎨"
+            "planner"  -> "📋"
+            "healer"   -> "💊"
+            else       -> "⚔️"
+        }
+
+        Dialog(
+            onDismissRequest = { showJobDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.White)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp)
+                ) {
+                    // ── 이모지 아이콘 원형 배지 ──────────────────────────
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .background(
+                                Brush.linearGradient(listOf(Blue50, Purple50)),
+                                CircleShape
+                            )
+                            .border(
+                                width = 1.5.dp,
+                                brush = Brush.linearGradient(
+                                    listOf(Blue300.copy(alpha = 0.6f), Purple400.copy(alpha = 0.4f))
+                                ),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text     = jobEmoji,
+                            fontSize = 32.sp
+                        )
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // ── 직업명 ────────────────────────────────────────────
+                    Text(
+                        text       = jobTitle,
+                        fontSize   = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = Gray900,
+                        letterSpacing = (-0.3).sp,
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    // ── 서브 태그 ─────────────────────────────────────────
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                Brush.horizontalGradient(listOf(Blue500, Purple500)),
+                                RoundedCornerShape(50)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text      = "이번 달 직업",
+                            fontSize  = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color     = Color.White,
+                            letterSpacing = 0.3.sp,
+                        )
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+
+                    // ── 구분선 ────────────────────────────────────────────
+                    HorizontalDivider(color = Gray200)
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // ── 이유 텍스트 ───────────────────────────────────────
+                    Text(
+                        text       = jobReason,
+                        fontSize   = 14.sp,
+                        color      = Gray600,
+                        lineHeight = 22.sp,
+                        textAlign  = TextAlign.Center,
+                    )
+
+                    Spacer(Modifier.height(28.dp))
+
+                    // ── 확인 버튼 ─────────────────────────────────────────
+                    Button(
+                        onClick = { showJobDialog = false },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Transparent
+                        ),
+                        contentPadding = PaddingValues(0.dp),
+                        elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.horizontalGradient(listOf(Blue500, Purple500)),
+                                    RoundedCornerShape(14.dp)
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text       = "확인",
+                                fontSize   = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color      = Color.White,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
 
@@ -118,12 +273,14 @@ fun HomeScreen(navController: NavController) {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // 직업 뱃지 — 터치 시 이유 팝업 표시
                     Box(
                         modifier = Modifier
                             .background(
                                 Brush.horizontalGradient(listOf(Blue50, Purple50)),
                                 RoundedCornerShape(50)
                             )
+                            .clickable { showJobDialog = true }
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
                         Text(
@@ -197,6 +354,13 @@ fun HomeScreen(navController: NavController) {
                             modifier   = Modifier.padding(top = 8.dp, bottom = 20.dp)
                         )
 
+                        Text(
+                            text = "월 예산 ₩${String.format("%,d", userStats.monthlyBudget)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Gray500,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
                             val isDown = (lastMonthChange ?: 0) <= 0
                             Box(
@@ -238,6 +402,28 @@ fun HomeScreen(navController: NavController) {
                         }
                     }
                 }
+            }
+        }
+
+        // 직업 변경 토스트
+        jobChangedMessage?.let { msg ->
+            LaunchedEffect(msg) {
+                delay(2500)
+                jobChangedMessage = null
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 56.dp)
+                    .background(Color(0xFF1E1E2E), RoundedCornerShape(50))
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text       = msg,
+                    color      = Color.White,
+                    style      = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
 

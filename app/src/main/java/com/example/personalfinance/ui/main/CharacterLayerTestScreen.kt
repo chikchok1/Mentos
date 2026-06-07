@@ -38,16 +38,6 @@ private fun listAssetFiles(context: android.content.Context, folder: String): Li
     runCatching { context.assets.list(folder)?.filter { it.endsWith(".png") }?.sorted() ?: emptyList() }
         .getOrDefault(emptyList())
 
-private fun displayName(filename: String?): String {
-    if (filename == null) return "없음"
-    return filename
-        .removeSuffix(".png")
-        .replace(Regex("^(f|top|bot|h|hat|acc)\\d+_?"), "")
-        .replace("_", " ")
-        .replaceFirstChar { it.uppercase() }
-        .ifBlank { filename.removeSuffix(".png") }
-}
-
 private enum class LayerCategory(
     val label: String,
     val folder: String,
@@ -125,7 +115,7 @@ fun CharacterLayerTestScreen(navController: NavController) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.White)
-                    .navigationBarsPadding()          // ← 시스템 네비게이션 바 높이만큼 자동 패딩
+                    .navigationBarsPadding()
                     .padding(horizontal = 24.dp, vertical = 12.dp)
             ) {
                 Button(
@@ -212,7 +202,7 @@ private fun LayerCategoryPanel(
             Text(category.label, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(8.dp))
             Text(
-                text       = displayName(selected),
+                text       = ItemNames.display(selected),
                 fontSize   = 12.sp,
                 color      = if (selected == null) Color(0xFFBBBBBB) else Color(0xFF7B61FF),
                 fontWeight = if (selected == null) FontWeight.Normal else FontWeight.SemiBold,
@@ -247,7 +237,7 @@ private fun LayerCategoryPanel(
                 )
                 files.forEach { file ->
                     ThumbnailCell(
-                        label      = displayName(file),
+                        label      = ItemNames.display(file),
                         isSelected = selected == file,
                         onClick    = { onSelect(file) },
                         thumbState = category.toState(file),
