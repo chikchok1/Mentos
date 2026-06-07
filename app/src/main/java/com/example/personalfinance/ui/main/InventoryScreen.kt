@@ -22,9 +22,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
 import com.example.personalfinance.data.ShopStore
+import com.example.personalfinance.data.CharacterAppearanceStore
 import com.example.personalfinance.ui.components.CharacterLayerPreview
 import com.example.personalfinance.ui.components.CharacterLayerState
 import com.example.personalfinance.ui.theme.*
+import kotlinx.coroutines.launch
 
 // ── 카테고리 정의 ──────────────────────────────────────────────────────────────
 
@@ -100,10 +102,15 @@ private fun listCategoryAssets(
 
 @Composable
 fun InventoryScreen(navController: NavController) {
-    val context      = LocalContext.current
-    val shopStore    = remember { ShopStore.getInstance(context) }
+    val context         = LocalContext.current
+    val shopStore       = remember { ShopStore.getInstance(context) }
+    val appearanceStore = remember { CharacterAppearanceStore.getInstance(context) }
 
     val ownedItems   by shopStore.ownedItems.collectAsState()
+    val equipped     by appearanceStore.appearanceFlow.collectAsState()
+
+    val coroutine = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var isLoading    by remember { mutableStateOf(true) }
 
@@ -143,11 +150,16 @@ fun InventoryScreen(navController: NavController) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF7F7F9))
-    ) {
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0),
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF7F7F9))
+                .padding(innerPadding)
+        ) {
         // ── 상단 헤더 ──────────────────────────────────────────────────────────
         Column(
             modifier = Modifier
@@ -264,12 +276,35 @@ fun InventoryScreen(navController: NavController) {
                             items = displayItems,
                             key   = { (grade, folder, file) -> "$grade/$folder/$file" },
                         ) { (grade, folder, filename) ->
-                            InventoryItemCard(
-                                grade    = grade,
-                                folder   = folder,
-                                filename = filename,
-                                category = selectedCategory,
-                            )
+                                InventoryItemCard(
+                                    grade      = grade,
+                                    folder     = folder,
+                                    filename   = filename,
+                                    category   = selectedCategory,
+                                    isEquipped = when (selectedCategory) {
+                                        InventoryCategory.FACE -> equipped.face == filename
+                                        InventoryCategory.HAIR -> equipped.hair == filename
+                                        InventoryCategory.HAT  -> equipped.hat == filename
+                                        InventoryCategory.TOP  -> equipped.topClothes == filename
+                                        InventoryCategory.BOT  -> equipped.botClothes == filename
+                                        InventoryCategory.ACC  -> equipped.accessory == filename
+                                    },
+                                    onEquip    = {
+                                        val newAppearance = when (selectedCategory) {
+                                            InventoryCategory.FACE -> equipped.copy(face = filename)
+                                            InventoryCategory.HAIR -> equipped.copy(hair = filename)
+                                            InventoryCategory.HAT  -> equipped.copy(hat = filename)
+                                            InventoryCategory.TOP  -> equipped.copy(topClothes = filename)
+                                            InventoryCategory.BOT  -> equipped.copy(botClothes = filename)
+                                            InventoryCategory.ACC  -> equipped.copy(accessory = filename)
+                                        }
+                                        appearanceStore.save(newAppearance)
+                                        coroutine.launch {
+                                            snackbarHostState.showSnackbar("장착 완료!")
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -329,6 +364,8 @@ private fun InventoryItemCard(
     folder: String,
     filename: String,
     category: InventoryCategory,
+    isEquipped: Boolean,
+    onEquip: () -> Unit,
 ) {
     val accent = gradeColor(grade)
 
@@ -407,6 +444,28 @@ private fun InventoryItemCard(
                     overflow = TextOverflow.Ellipsis,
                     color    = Color(0xFF333333),
                 )
+            }
+            
+            Spacer(Modifier.height(8.dp))
+            if (isEquipped) {
+                Text(
+                    "장착 중",
+                    fontSize = 10.sp,
+                    color    = Color(0xFF0F6E56),
+                    modifier = Modifier
+                        .background(Color(0xFFD4F0E7), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            } else {
+                Button(
+                    onClick        = onEquip,
+                    modifier       = Modifier.fillMaxWidth().height(28.dp),
+                    shape          = RoundedCornerShape(8.dp),
+                    colors         = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D9E75)),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                ) {
+                    Text("장착", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
