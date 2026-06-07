@@ -9,11 +9,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.runtime.*
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.MonthDay
+import java.time.OffsetDateTime
 import java.time.YearMonth
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,30 +64,95 @@ private fun categoryEmojiForClassifier(category: String): String = when (categor
     else                                                   -> "📦"
 }
 
-private fun transactionSourceLabel(source: String): String = when (source) {
-    TransactionSource.NOTIFICATION -> "알림 자동 저장"
-    TransactionSource.SAMPLE -> "샘플"
-    TransactionSource.MANUAL -> "직접 입력"
-    else -> source
+private val merchantTechnicalSuffixPattern = Regex(
+    pattern = """[_\s]+(?:나이스|KICC)\s*(?:\(\s*\))?\s*$""",
+    option = RegexOption.IGNORE_CASE
+)
+private val merchantBankPrefixPattern = Regex(
+    pattern = """^(?:완료\s+)?(?:NH농협은행|농협은행)\s+(.+)$""",
+    option = RegexOption.IGNORE_CASE
+)
+private val merchantLeadingSeparatorPattern = Regex("""^[\s"ㆍ·•･・‧∙\-_]+""")
+
+private fun displayMerchantName(rawName: String): String {
+    val normalized = rawName.trim().replace(Regex("""\s+"""), " ")
+    val withoutBankPrefix = merchantBankPrefixPattern
+        .matchEntire(normalized)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?: normalized
+    val cleaned = withoutBankPrefix
+        .trim()
+        .replace(merchantTechnicalSuffixPattern, "")
+        .replace(Regex("""\s*\(\s*\)\s*$"""), "")
+        .replace(merchantLeadingSeparatorPattern, "")
+        .trim()
+    val parts = cleaned.split(Regex("""\s+""")).filter { it.isNotBlank() }
+    val deduped = if (parts.size > 1 && parts.distinct().size == 1) parts.first() else cleaned
+
+    return deduped.ifBlank { rawName.trim() }
 }
-
-private fun formatTransactionDateTime(value: String, fallback: String): String =
-    runCatching {
-        LocalDateTime.parse(value).format(detailDateTimeFormatter)
-    }.getOrDefault(fallback)
-
-private fun shortenTransactionId(id: String): String =
-    if (id.length <= 48) id else id.take(36) + "..." + id.takeLast(10)
 
 private val detailDateTimeFormatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("yyyy년 M월 d일 HH:mm")
 
+private val transactionZone: ZoneId = ZoneId.of("Asia/Seoul")
+private val transactionDisplayFallbackFormatter: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("MM/dd HH:mm")
+
+private fun transactionLocalDateTime(value: String): LocalDateTime? {
+    val trimmed = value.trim()
+    if (trimmed.isEmpty()) return null
+
+    return runCatching {
+        OffsetDateTime.parse(trimmed).atZoneSameInstant(transactionZone).toLocalDateTime()
+    }.getOrNull()
+        ?: runCatching {
+            ZonedDateTime.parse(trimmed).withZoneSameInstant(transactionZone).toLocalDateTime()
+        }.getOrNull()
+        ?: runCatching {
+            Instant.parse(trimmed).atZone(transactionZone).toLocalDateTime()
+        }.getOrNull()
+        ?: runCatching {
+            LocalDateTime.parse(trimmed)
+        }.getOrNull()
+        ?: runCatching {
+            LocalDate.parse(trimmed).atStartOfDay()
+        }.getOrNull()
+}
+
+private fun transactionDateFallback(value: String): LocalDate? {
+    val trimmed = value.trim()
+    if (trimmed.isEmpty()) return null
+
+    return runCatching {
+        LocalDate.parse(trimmed)
+    }.getOrNull()
+        ?: runCatching {
+            LocalDateTime.parse(trimmed).toLocalDate()
+        }.getOrNull()
+        ?: runCatching {
+            val monthDay = MonthDay.from(transactionDisplayFallbackFormatter.parse(trimmed))
+            monthDay.atYear(LocalDate.now(transactionZone).year)
+        }.getOrNull()
+}
+
+private fun transactionLocalDate(tx: Transaction): LocalDate? =
+    transactionLocalDateTime(tx.occurredAt)?.toLocalDate()
+        ?: transactionDateFallback(tx.date)
+
+private fun transactionLocalDateTime(tx: Transaction): LocalDateTime? =
+    transactionLocalDateTime(tx.occurredAt)
+        ?: transactionDateFallback(tx.date)?.atStartOfDay()
+
+private fun formatTransactionDateTime(value: String, fallback: String): String =
+    transactionLocalDateTime(value)?.format(detailDateTimeFormatter) ?: fallback
+
 /**
- * 서버 dailyBreakdown + 로컬 거래 목록을 병합해 DailySpendingData 생성
- * 서버 데이터(금액)를 우선 사용하고, topCategory는 로컬 거래에서 추출
+ * Builds daily spending from local transactions so chart bars and the selected day list
+ * always use the same transaction date rule.
  */
 private fun mergeDailyData(
-    serverBreakdown: Map<Int, Long>?,
     localTransactions: List<Transaction>,
     month: YearMonth
 ): List<DailySpendingData> {
@@ -92,16 +161,14 @@ private fun mergeDailyData(
     // 로컬 거래에서 일별 카테고리 집계 (topCategory 결정용)
     val localByDay = localTransactions
         .mapNotNull { tx ->
-            runCatching {
-                val d = LocalDateTime.parse(tx.occurredAt).dayOfMonth
-                d to tx
-            }.getOrNull()
+            val txDate = transactionLocalDate(tx)
+            if (txDate != null && YearMonth.from(txDate) == month) txDate.dayOfMonth to tx else null
         }
         .groupBy { it.first }
         .mapValues { (_, pairs) -> pairs.map { it.second } }
 
     return (1..daysInMonth).map { day ->
-        val amount = serverBreakdown?.get(day) ?: localByDay[day]?.sumOf { it.amount } ?: 0L
+        val amount = localByDay[day]?.sumOf { it.amount } ?: 0L
         val topCat = localByDay[day]
             ?.groupBy { it.category }
             ?.maxByOrNull { (_, v) -> v.sumOf { it.amount } }
@@ -118,9 +185,7 @@ private fun buildMonthlyData(transactions: List<Transaction>): List<MonthlyData>
     val built = (5 downTo 0).map { offset ->
         val ym = now.minusMonths(offset.toLong())
         val total = transactions.filter { tx ->
-            runCatching {
-                YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate()) == ym
-            }.getOrDefault(false)
+            transactionLocalDate(tx)?.let { YearMonth.from(it) == ym } == true
         }.sumOf { it.amount }.toInt()
         MonthlyData(
             month  = if (ym.year == now.year) monthNames[ym.monthValue] else "${ym.year % 100}/" + monthNames[ym.monthValue],
@@ -209,10 +274,7 @@ fun LedgerScreen(navController: NavController) {
 
     // 선택된 월 거래만 필터
     val transactions = storedTransactions.filter { tx ->
-        val txMonth = runCatching {
-            YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate())
-        }.getOrNull()
-        txMonth == currentMonth
+        transactionLocalDate(tx)?.let { YearMonth.from(it) == currentMonth } == true
     }
     val selectedTransactionForDetail = selectedTransactionDetailId?.let { selectedId ->
         storedTransactions.firstOrNull { it.id == selectedId }
@@ -227,9 +289,8 @@ fun LedgerScreen(navController: NavController) {
     val categories    = buildCategoriesFromStats(categorySpendingForMonth, transactions)
     val totalSpending = (serverStats?.totalAmount ?: transactions.sumOf { it.amount }).toInt()
 
-    // 일별 데이터: 서버 dailyBreakdown 병합
+    // 일별 데이터: 로컬 거래 날짜 기준으로 목록과 동일하게 집계
     val dailyData = mergeDailyData(
-        serverBreakdown   = serverStats?.dailyBreakdown,
         localTransactions = transactions,
         month             = currentMonth
     )
@@ -398,6 +459,7 @@ fun LedgerScreen(navController: NavController) {
     if (showTransactionDetailSheet && selectedTransactionForDetail != null) {
         val detailTx = selectedTransactionForDetail
         val catColor = categoryColorFor(detailTx.category)
+        val detailMerchantName = displayMerchantName(detailTx.store)
         ModalBottomSheet(
             onDismissRequest = {
                 showTransactionDetailSheet = false
@@ -426,7 +488,7 @@ fun LedgerScreen(navController: NavController) {
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        detailTx.store,
+                        detailMerchantName,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Gray500
                     )
@@ -450,29 +512,25 @@ fun LedgerScreen(navController: NavController) {
                 // ── 상세 행들 ────────────────────────────────────────────────
                 Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                     TransactionDetailRow(
+                        icon  = Icons.Rounded.ShoppingCart,
+                        label = "결제처",
+                        value = detailMerchantName
+                    )
+                    if (detailMerchantName != detailTx.store) {
+                        TransactionDetailRow(
+                            icon  = Icons.Rounded.Info,
+                            label = "원본 가맹점명",
+                            value = detailTx.store,
+                            valueColor = Gray500
+                        )
+                    }
+                    TransactionDetailRow(
                         icon  = Icons.Rounded.DateRange,
                         label = "결제 일시",
                         value = formatTransactionDateTime(detailTx.occurredAt, detailTx.date)
                     )
-                    TransactionDetailRow(
-                        icon  = Icons.Rounded.Info,
-                        label = "저장 방식",
-                        value = transactionSourceLabel(detailTx.source)
-                    )
-                    if (detailTx.source == TransactionSource.NOTIFICATION || detailTx.source == TransactionSource.SAMPLE) {
-                        TransactionDetailRow(
-                            icon       = Icons.Rounded.Notifications,
-                            label      = "알림 원문",
-                            value      = "원문 없음",
-                            valueColor = Gray400
-                        )
-                    }
-                    TransactionDetailRow(
-                        icon       = Icons.Rounded.Lock,
-                        label      = "거래 ID",
-                        value      = shortenTransactionId(detailTx.id),
-                        isMono     = true
-                    )
+
+
                 }
 
                 HorizontalDivider(color = Gray100, modifier = Modifier.padding(top = 4.dp))
@@ -533,7 +591,7 @@ fun LedgerScreen(navController: NavController) {
             ) {
                 Text("카테고리 수정", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Gray600)
                 Spacer(Modifier.height(8.dp))
-                Text("${selectedTransactionForEdit?.store}의 카테고리를 선택하세요",
+                Text("${selectedTransactionForEdit?.let { displayMerchantName(it.store) }}의 카테고리를 선택하세요",
                     style = MaterialTheme.typography.bodyMedium, color = Gray500)
                 Spacer(Modifier.height(24.dp))
 
@@ -597,8 +655,7 @@ private fun TransactionDetailRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     value: String,
-    valueColor: Color = Gray700,
-    isMono: Boolean = false
+    valueColor: Color = Gray700
 ) {
     Row(
         modifier = Modifier
@@ -625,15 +682,12 @@ private fun TransactionDetailRow(
         }
         Spacer(Modifier.width(16.dp))
         Text(
-            value.ifBlank { "-" },
-            style = if (isMono)
-                MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-            else
-                MaterialTheme.typography.bodyMedium,
-            fontWeight = if (isMono) FontWeight.Normal else FontWeight.Medium,
-            color = if (isMono) Gray400 else valueColor,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f)
+        value.ifBlank { "-" },
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.Medium,
+        color = valueColor,
+        textAlign = TextAlign.End,
+        modifier = Modifier.weight(1f)
         )
     }
     HorizontalDivider(color = Gray100)
@@ -714,13 +768,13 @@ private fun DailySpendingChart(
         ) {
             selectedData?.let { data ->
                 val categoryColor = categoryColorFor(data.topCategory)
-                val summaryColor = if (data.amount > 0L) categoryColor else Blue500
+                val summaryColor = if (data.amount > 0L) categoryColor else Gray400
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp),
                     shape = RoundedCornerShape(12.dp),
-                    color = summaryColor.copy(alpha = 0.10f),
+                    color = if (data.amount > 0L) summaryColor.copy(alpha = 0.10f) else Gray50,
                     tonalElevation = 0.dp
                 ) {
                     Row(
@@ -785,12 +839,12 @@ private fun DailySpendingChart(
                 }
                 val barH = when {
                     data.amount > 0L -> (chartH.value * visualFraction).coerceAtLeast(minSpendingBarH.value).dp
-                    isSelected -> 12.dp
                     else -> emptyBarH
                 }
-                val selectedColor = if (data.amount > 0L) categoryColor else Blue500
+                val selectedColor = if (data.amount > 0L) categoryColor else Gray200
                 val barColor = when {
-                    isSelected -> selectedColor
+                    isSelected && data.amount > 0L -> selectedColor
+                    isSelected -> Gray100
                     data.amount > 0L -> categoryColor.copy(alpha = 0.48f)
                     else -> Gray100
                 }
@@ -801,7 +855,8 @@ private fun DailySpendingChart(
                     else -> ""
                 }
                 val labelColor = when {
-                    isSelected -> selectedColor
+                    isSelected && data.amount > 0L -> selectedColor
+                    isSelected -> Gray500
                     isToday -> Blue500
                     else -> Gray400
                 }
@@ -822,11 +877,12 @@ private fun DailySpendingChart(
                         contentAlignment = Alignment.BottomCenter
                     ) {
                         if (isToday) {
+                            val todayDotColor = if (data.amount > 0L) Blue500 else Gray200
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
                                     .size(if (isSelected) 7.dp else 5.dp)
-                                    .background(Blue500, CircleShape)
+                                    .background(todayDotColor, CircleShape)
                             )
                         }
 
@@ -838,8 +894,8 @@ private fun DailySpendingChart(
                                 .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
                                 .background(barColor)
                                 .border(
-                                    width = if (isSelected) 1.5.dp else 0.dp,
-                                    color = if (isSelected) selectedColor else Color.Transparent,
+                                    width = if (isSelected && data.amount > 0L) 1.5.dp else 0.dp,
+                                    color = if (isSelected && data.amount > 0L) selectedColor else Color.Transparent,
                                     shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
                                 )
                         )
@@ -899,22 +955,28 @@ private fun LedgerTab(
     var selectedDay by remember(currentMonth) {
         mutableStateOf(if (isThisMonth) today.dayOfMonth.coerceIn(1, currentMonth.lengthOfMonth()) else null)
     }
-    val timeFormatter = remember { java.time.format.DateTimeFormatter.ofPattern("HH:mm") }
-    val transactionDateTimeOrNull: (Transaction) -> LocalDateTime? = { tx ->
-        runCatching { LocalDateTime.parse(tx.occurredAt) }.getOrNull()
+    var isAllTransactionsExpanded by remember(currentMonth, selectedCategory) {
+        mutableStateOf(false)
     }
+    val timeFormatter = remember { java.time.format.DateTimeFormatter.ofPattern("HH:mm") }
+    val listDateTimeFormatter = remember { java.time.format.DateTimeFormatter.ofPattern("M/d HH:mm") }
     val selectedDayTransactions = selectedDay?.let { day ->
+        val selectedDate = currentMonth.atDay(day)
         transactions
             .filter { tx ->
-                val dateTime = transactionDateTimeOrNull(tx)
-                dateTime != null && dateTime.dayOfMonth == day && YearMonth.from(dateTime.toLocalDate()) == currentMonth
+                transactionLocalDate(tx) == selectedDate
             }
-            .sortedByDescending { tx -> transactionDateTimeOrNull(tx) ?: LocalDateTime.MIN }
+            .sortedByDescending { tx -> transactionLocalDateTime(tx) ?: LocalDateTime.MIN }
     }.orEmpty()
     val categoryFilteredTransactions = if (selectedCategory != null) {
         transactions.filter { it.category == selectedCategory }
     } else {
         transactions
+    }.sortedByDescending { tx -> transactionLocalDateTime(tx) ?: LocalDateTime.MIN }
+    val visibleTransactions = if (isAllTransactionsExpanded) {
+        categoryFilteredTransactions
+    } else {
+        categoryFilteredTransactions.take(5)
     }
 
     if (categories.isNotEmpty()) {
@@ -1018,7 +1080,8 @@ private fun LedgerTab(
             } else {
                 selectedDayTransactions.forEach { tx ->
                     val catColor = categoryColorFor(tx.category)
-                    val timeText = transactionDateTimeOrNull(tx)?.format(timeFormatter) ?: tx.date
+                    val timeText = transactionLocalDateTime(tx)?.format(timeFormatter) ?: tx.date
+                    val merchantName = displayMerchantName(tx.store)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1047,7 +1110,7 @@ private fun LedgerTab(
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    tx.store,
+                                    merchantName,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = Gray700,
@@ -1071,13 +1134,20 @@ private fun LedgerTab(
     }
 
     if (categories.isNotEmpty()) {
-        Spacer(Modifier.height(16.dp))
-        val rows = categories.chunked(3)
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "이번 달 카테고리 비율",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = Gray600,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        val ratioRows = categories.take(6).chunked(3)
         Column(
             modifier = Modifier.padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            rows.forEach { row ->
+            ratioRows.forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1114,9 +1184,9 @@ private fun LedgerTab(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(24.dp))
         Text(
-            "카테고리별 내역",
+            "카테고리별 지출 금액",
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color = Gray600,
@@ -1165,8 +1235,10 @@ private fun LedgerTab(
             color = Gray600,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
         )
-        categoryFilteredTransactions.forEach { tx ->
+        visibleTransactions.forEach { tx ->
             val catColor = categoryColorFor(tx.category)
+            val merchantName = displayMerchantName(tx.store)
+            val dateTimeText = transactionLocalDateTime(tx)?.format(listDateTimeFormatter) ?: tx.date
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1187,13 +1259,13 @@ private fun LedgerTab(
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            tx.store,
+                            merchantName,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
-                        Text("${tx.category} · ${tx.date}", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                        Text("${tx.category} · $dateTimeText", style = MaterialTheme.typography.bodySmall, color = Gray500)
                     }
                 }
                 Text(
@@ -1201,6 +1273,22 @@ private fun LedgerTab(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+        if (categoryFilteredTransactions.size > 5) {
+            OutlinedButton(
+                onClick = { isAllTransactionsExpanded = !isAllTransactionsExpanded },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 10.dp)
+                    .height(44.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Blue500)
+            ) {
+                Text(
+                    if (isAllTransactionsExpanded) "간단히 보기" else "전체 내역 보기",
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
