@@ -336,6 +336,20 @@ fun InventoryScreen(navController: NavController) {
                                         coroutine.launch {
                                             snackbarHostState.showSnackbar("장착 완료!")
                                         }
+                                    },
+                                    onUnequip  = {
+                                        val newAppearance = when (selectedCategory) {
+                                            InventoryCategory.FACE -> equipped.copy(face = null)
+                                            InventoryCategory.HAIR -> equipped.copy(hair = null)
+                                            InventoryCategory.HAT  -> equipped.copy(hat = null)
+                                            InventoryCategory.TOP  -> equipped.copy(topClothes = null)
+                                            InventoryCategory.BOT  -> equipped.copy(botClothes = null)
+                                            InventoryCategory.ACC  -> equipped.copy(accessory = null)
+                                        }
+                                        appearanceStore.save(newAppearance)
+                                        coroutine.launch {
+                                            snackbarHostState.showSnackbar("장착 해제 완료!")
+                                        }
                                     }
                                 )
                             }
@@ -400,6 +414,7 @@ private fun InventoryItemCard(
     category: InventoryCategory,
     isEquipped: Boolean,
     onEquip: () -> Unit,
+    onUnequip: () -> Unit,
 ) {
     val accent = gradeColor(grade)
 
@@ -482,6 +497,7 @@ private fun InventoryItemCard(
             
             Spacer(Modifier.height(8.dp))
             if (isEquipped) {
+                // 장착 중 뱃지
                 Text(
                     "장착 중",
                     fontSize = 10.sp,
@@ -490,6 +506,17 @@ private fun InventoryItemCard(
                         .background(Color(0xFFD4F0E7), RoundedCornerShape(6.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
+                Spacer(Modifier.height(6.dp))
+                // 해제 버튼
+                Button(
+                    onClick        = onUnequip,
+                    modifier       = Modifier.fillMaxWidth().height(28.dp),
+                    shape          = RoundedCornerShape(8.dp),
+                    colors         = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                ) {
+                    Text("해제", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                }
             } else {
                 Button(
                     onClick        = onEquip,
