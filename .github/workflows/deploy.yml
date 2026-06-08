@@ -21,17 +21,18 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Gradle 8.6
+      - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.6
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x backend/gradlew
 
       - name: Build JAR
         run: |
           cd backend
 
           for i in 1 2 3; do
-            if gradle bootJar -x test --no-daemon; then
+            if ./gradlew bootJar -x test --no-daemon; then
               echo "Gradle build succeeded."
               exit 0
             fi
