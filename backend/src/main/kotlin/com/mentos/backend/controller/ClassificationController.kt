@@ -15,7 +15,10 @@ class ClassificationController(
     @GetMapping("/categorize")
     fun categorizeMerchant(
         @RequestHeader("Authorization") authHeader: String?,
-        @RequestParam merchantName: String
+        @RequestParam merchantName: String,
+        @RequestParam(required = false) lat: Double?,
+        @RequestParam(required = false) lng: Double?,
+        @RequestParam(required = false) isOnline: Boolean?
     ): ResponseEntity<Map<String, String>> {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return ResponseEntity.status(401).body(mapOf("error" to "Missing authorization token"))
@@ -26,7 +29,7 @@ class ClassificationController(
             return ResponseEntity.status(401).body(mapOf("error" to "Invalid access token"))
         }
 
-        val category = aiClassificationService.classifyMerchant(merchantName)
+        val category = aiClassificationService.classifyMerchant(merchantName, lat, lng, isOnline)
         return ResponseEntity.ok(mapOf(
             "merchantName" to merchantName,
             "category" to category

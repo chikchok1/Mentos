@@ -3,6 +3,7 @@ package com.example.personalfinance.ui.main
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Send
@@ -99,6 +101,18 @@ fun NotificationDebugScreen(navController: NavController) {
         }
     }
 
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        if (fineGranted || coarseGranted) {
+            Toast.makeText(context, "위치 권한이 허용되었습니다. 백그라운드 분석을 위해 우측 버튼을 눌러 '항상 허용'으로 변경해주세요.", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(context, "위치 권한이 거부되었습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -163,6 +177,22 @@ fun NotificationDebugScreen(navController: NavController) {
                     }
                 )
             }
+
+            LocationPermissionPanel(
+                onRequestPermission = {
+                    locationPermissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
+                },
+                onOpenSettings = {
+                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    })
+                }
+            )
 
             Button(
                 onClick = {
@@ -229,6 +259,39 @@ private fun PostNotificationPermissionPanel(onRequestPermission: () -> Unit) {
         ) {
             Icon(Icons.Rounded.Notifications, contentDescription = null)
             Text("테스트 알림 권한 요청", modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun LocationPermissionPanel(onRequestPermission: () -> Unit, onOpenSettings: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Gray200, RoundedCornerShape(8.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            "결제 위치 기반의 정확한 AI 카테고리 분석을 위해 백그라운드 위치 권한('항상 허용')이 필요합니다.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Gray700
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onRequestPermission,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Rounded.LocationOn, contentDescription = null)
+                Text("1차 권한 요청", modifier = Modifier.padding(start = 4.dp))
+            }
+            OutlinedButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Rounded.OpenInNew, contentDescription = null)
+                Text("항상 허용 설정", modifier = Modifier.padding(start = 4.dp))
+            }
         }
     }
 }

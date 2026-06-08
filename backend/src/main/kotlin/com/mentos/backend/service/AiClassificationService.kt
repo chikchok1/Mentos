@@ -21,7 +21,12 @@ class AiClassificationService(
     private val client = OkHttpClient()
 
     @Transactional
-    fun classifyMerchant(merchantName: String): String {
+    fun classifyMerchant(
+        merchantName: String,
+        lat: Double? = null,
+        lng: Double? = null,
+        isOnlineUserFlag: Boolean? = null
+    ): String {
         val safeMerchantName = sanitizeClassificationInput(merchantName)
         if (safeMerchantName.isBlank()) {
             return DEFAULT_CATEGORY
@@ -33,14 +38,32 @@ class AiClassificationService(
             return normalizeGeminiCategory(cached.category)
         }
 
-        // 2. 카카오맵 API 호출
-        val kakaoCategory = getKakaoCategory(safeMerchantName)
+        // 2. 온라인 결제 여부 판단 (클라이언트 플래그 or 키워드 사전)
+        val isOnline = (isOnlineUserFlag == true) || isOnlineMerchant(safeMerchantName)
 
-        // 3. 상호명 + 카카오 카테고리(있으면)를 함께 전달해 맥락 손실 방지
-        val textToClassify = if (kakaoCategory != null) {
-            "상호명: $safeMerchantName, 카카오 업종: $kakaoCategory"
+        val textToClassify: String
+        if (isOnline) {
+            // 온라인 결제: 위치 무시 및 카카오 API 생략
+            textToClassify = "상호명: $safeMerchantName, 특징: 온라인 결제/PG사"
         } else {
-            "상호명: $safeMerchantName"
+            // 오프라인 결제: 카카오맵 API 검색
+            var kakaoCategory = if (lat != null && lng != null) {
+                // 반경 2km 지역 검색 시도
+                getKakaoCategory(safeMerchantName, lat, lng)
+            } else {
+                null
+            }
+
+            // 지역 검색 결과가 없거나 위치 정보가 없다면 전국 검색 Fallback
+            if (kakaoCategory == null) {
+                kakaoCategory = getKakaoCategory(safeMerchantName, null, null)
+            }
+
+            textToClassify = if (kakaoCategory != null) {
+                "상호명: $safeMerchantName, 카카오 업종: $kakaoCategory"
+            } else {
+                "상호명: $safeMerchantName"
+            }
         }
 
         // 4. Gemini API로 7개 카테고리 중 하나로 분류
@@ -52,10 +75,16 @@ class AiClassificationService(
         return finalCategory
     }
 
-    private fun getKakaoCategory(merchantName: String): String? {
+    private fun getKakaoCategory(merchantName: String, lat: Double?, lng: Double?): String? {
         val encodedQuery = URLEncoder.encode(sanitizeClassificationInput(merchantName), "UTF-8")
+        var urlStr = "https://dapi.kakao.com/v2/local/search/keyword.json?query=$encodedQuery"
+        
+        if (lat != null && lng != null) {
+            urlStr += "&x=$lng&y=$lat&radius=2000&sort=distance"
+        }
+
         val request = Request.Builder()
-            .url("https://dapi.kakao.com/v2/local/search/keyword.json?query=$encodedQuery")
+            .url(urlStr)
             .addHeader("Authorization", "KakaoAK $kakaoApiKey")
             .build()
 
@@ -179,9 +208,44 @@ class AiClassificationService(
             .trim()
             .take(MAX_CLASSIFICATION_INPUT_LENGTH)
 
+    private fun isOnlineMerchant(merchantName: String): Boolean {
+        return ONLINE_KEYWORDS.any { merchantName.contains(it, ignoreCase = true) }
+    }
+
     private companion object {
         private const val MAX_CLASSIFICATION_INPUT_LENGTH = 120
         private val CONTROL_OR_WHITESPACE_PATTERN = Regex("""\s+""")
+        
+        private val ONLINE_KEYWORDS = listOf(
+            // 간편결제 및 PG사
+            "네이버페이", "카카오페이", "토스", "이니시스", "NICE", "KCP", "다날", "모빌리언스",
+            "페이먼츠", "스마일페이", "페이코", "차이", "KSNET", "KICC", "스마트로", "나이스페이", "KG",
+
+            // 종합 쇼핑몰 및 이커머스
+            "쿠팡", "11번가", "지마켓", "옥션", "SSG", "위메프", "티몬", "인터파크", "마켓컬리", "컬리",
+            "알리익스프레스", "테무", "아마존", "큐텐", "오아시스", "오늘의집",
+
+            // 패션 및 뷰티
+            "무신사", "에이블리", "지그재그", "크림", "솔드아웃", "W컨셉", "29CM",
+
+            // 배달 및 모빌리티
+            "배달의민족", "배민", "요기요", "쿠팡이츠", "땡겨요", "카카오T", "우티", "쏘카", "그린카",
+
+            // 디지털 콘텐츠 및 구독 (OTT, 음악, 웹툰, 도서)
+            "넷플릭스", "유튜브", "티빙", "왓챠", "디즈니플러스", "웨이브",
+            "멜론", "지니뮤직", "플로", "벅스", "스포티파이", "애플", "구글", "구글플레이", "앱스토어", "원스토어",
+            "리디", "밀리의서재", "카카오페이지", "네이버웹툰", "레진코믹스",
+
+            // 여행 및 숙박
+            "야놀자", "여기어때", "에어비앤비", "아고다", "트립닷컴", "익스피디아",
+
+            // 게임
+            "스팀", "넥슨", "엔씨", "넷마블", "라이엇", "블리자드", "플레이스테이션", "닌텐도", "에픽게임즈",
+
+            // 통신비 및 공과금
+            "SKT", "KT", "LGU+"
+        )
+        
         private val VALID_CATEGORIES = listOf(
             "\uC2DD\uBE44/\uCE74\uD398",
             "\uC0DD\uD65C/\uB9C8\uD2B8",
