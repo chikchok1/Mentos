@@ -102,10 +102,13 @@ fun ProfileScreen(
     val store     = remember { UserStatsStore.getInstance(context) }
     val userStats by store.statsFlow.collectAsState()
     val nickname  by store.nicknameFlow.collectAsState()
+    val friendCode by store.friendCodeFlow.collectAsState()
+    val displayName by store.displayNameFlow.collectAsState()
     val privacy   by store.privacyFlow.collectAsState()
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
+        store.refreshProfile()
         store.refreshServerStats()
         store.refreshPrivacy()
     }
@@ -146,6 +149,7 @@ fun ProfileScreen(
     // 닉네임 수정 다이얼로그
     var showEditDialog by remember { mutableStateOf(false) }
     var editingName    by remember { mutableStateOf("") }
+    var nicknameSaveError by remember { mutableStateOf<String?>(null) }
     var showBudgetDialog by remember { mutableStateOf(false) }
     var editingBudget by remember { mutableStateOf("") }
     var budgetSaveError by remember { mutableStateOf<String?>(null) }
@@ -234,22 +238,101 @@ fun ProfileScreen(
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("닉네임 변경", fontWeight = FontWeight.SemiBold) },
+            title = { Text("Nickname", fontWeight = FontWeight.SemiBold) },
             text = {
-                OutlinedTextField(
-                    value         = editingName,
-                    onValueChange = { if (it.length <= 12) editingName = it },
-                    placeholder   = { Text("닉네임을 입력하세요 (최대 12자)") },
-                    singleLine    = true,
-                    modifier      = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                    shape         = RoundedCornerShape(12.dp),
-                    colors        = OutlinedTextFieldDefaults.colors(focusedBorderColor = Blue500)
-                )
+                Column {
+                    OutlinedTextField(
+                        value = editingName,
+                        onValueChange = { value ->
+                            if (value.length <= 12 && !value.contains("#")) editingName = value
+                        },
+                        placeholder = { Text("2-12 chars, no #") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Blue500)
+                    )
+                    nicknameSaveError?.let { message ->
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = RedDanger,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (editingName.isNotBlank()) store.saveNickname(editingName)
-                    showEditDialog = false
+                    val nextName = editingName.trim()
+                    if (nextName.length !in 2..12 || nextName.contains("#")) {
+                        nicknameSaveError = "Nickname must be 2-12 chars without #."
+                        return@TextButton
+                    }
+                    scope.launch {
+                        val saved = store.updateNicknameWithServer(nextName)
+                        if (saved) {
+                            nicknameSaveError = null
+                            showEditDialog = false
+                        } else {
+                            nicknameSaveError = "Failed to save nickname."
+                        }
+                    }
+                }) { Text("Save", color = Blue500, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) { Text("Cancel", color = Gray500) }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    /*
+    if (showEditDialog) {
+        val focusRequester = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("닉네임 변경", fontWeight = FontWeight.SemiBold) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editingName,
+                        onValueChange = { value ->
+                            if (value.length <= 12 && !value.contains("#")) editingName = value
+                        },
+                        placeholder = { Text("닉네임을 입력하세요 (2~12자)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Blue500)
+                    )
+                    nicknameSaveError?.let { message ->
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = RedDanger,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val nextName = editingName.trim()
+                    if (nextName.length !in 2..12 || nextName.contains("#")) {
+                        nicknameSaveError = "닉네임은 # 없이 2~12자로 입력해 주세요."
+                        return@TextButton
+                    }
+                    scope.launch {
+                        val saved = store.updateNicknameWithServer(nextName)
+                        if (saved) {
+                            nicknameSaveError = null
+                            showEditDialog = false
+                        } else {
+                            nicknameSaveError = "닉네임 저장에 실패했습니다."
+                        }
+                    }
                 }) { Text("저장", color = Blue500, fontWeight = FontWeight.SemiBold) }
             },
             dismissButton = {
@@ -259,6 +342,63 @@ fun ProfileScreen(
         )
     }
 
+    /*
+    if (showEditDialog) {
+        val focusRequester = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("닉네임 변경", fontWeight = FontWeight.SemiBold) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                    value         = editingName,
+                    onValueChange = { value ->
+                        if (value.length <= 12 && !value.contains("#")) editingName = value
+                    },
+                    placeholder   = { Text("닉네임을 입력하세요 (최대 12자)") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                    shape         = RoundedCornerShape(12.dp),
+                        colors        = OutlinedTextFieldDefaults.colors(focusedBorderColor = Blue500)
+                    )
+                    nicknameSaveError?.let { message ->
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = RedDanger,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val nextName = editingName.trim()
+                    if (nextName.length !in 2..12 || nextName.contains("#")) {
+                        nicknameSaveError = "닉네임은 # 없이 2~12자로 입력해 주세요."
+                        return@TextButton
+                    }
+                    scope.launch {
+                        val saved = store.updateNicknameWithServer(nextName)
+                        if (saved) {
+                            nicknameSaveError = null
+                            showEditDialog = false
+                        } else {
+                            nicknameSaveError = "닉네임 저장에 실패했습니다."
+                        }
+                    }
+                }) { Text("저장", color = Blue500, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) { Text("취소", color = Gray500) }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    */
+    */
     if (showBudgetDialog) {
         AlertDialog(
             onDismissRequest = { showBudgetDialog = false },
@@ -356,6 +496,15 @@ fun ProfileScreen(
                         style      = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
+                    if (friendCode.isNotBlank()) {
+                        Text(
+                            "공유 이름: ${displayName.ifBlank { nickname }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Gray600,
+                            modifier = Modifier.padding(top = 2.dp),
+                            maxLines = 1
+                        )
+                    }
                     Text(
                         "Lv.${userStats.currentLevel} · ${UserStatsCalculator.levelTitle(userStats.currentLevel)}",
                         style    = MaterialTheme.typography.bodyMedium,
@@ -365,6 +514,7 @@ fun ProfileScreen(
                 }
                 IconButton(onClick = {
                     editingName    = nickname
+                    nicknameSaveError = null
                     showEditDialog = true
                 }) {
                     Icon(Icons.Rounded.Edit, null, tint = Blue500, modifier = Modifier.size(20.dp))

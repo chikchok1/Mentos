@@ -9,6 +9,8 @@ import com.example.personalfinance.network.PrivacySettingsResponse
 import com.example.personalfinance.network.SaveTransactionRequest
 import com.example.personalfinance.network.UpdateCategoryByClientIdRequest
 import com.example.personalfinance.network.UpdateBudgetRequest
+import com.example.personalfinance.network.UpdateUserProfileRequest
+import com.example.personalfinance.network.UserProfileResponse
 import com.example.personalfinance.network.UserStatsResponse
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -50,6 +52,12 @@ data class UserStats(
 data class PrivacySettings(
     val spendingVisibility: String = "PRIVATE",
     val characterVisibility: String = "FRIENDS"
+)
+
+data class UserProfile(
+    val nickname: String = "",
+    val friendCode: String = "",
+    val displayName: String = ""
 )
 
 object UserStatsCalculator {
@@ -214,12 +222,54 @@ class UserStatsStore private constructor(context: Context) {
     private val _nicknameFlow = MutableStateFlow(prefs.getString(KEY_NICKNAME, "") ?: "")
     val nicknameFlow: StateFlow<String> = _nicknameFlow.asStateFlow()
 
+    private val _friendCodeFlow = MutableStateFlow(prefs.getString(KEY_FRIEND_CODE, "") ?: "")
+    val friendCodeFlow: StateFlow<String> = _friendCodeFlow.asStateFlow()
+
+    private val _displayNameFlow = MutableStateFlow(prefs.getString(KEY_DISPLAY_NAME, "") ?: "")
+    val displayNameFlow: StateFlow<String> = _displayNameFlow.asStateFlow()
+
     private val _privacyFlow = MutableStateFlow(loadPrivacy())
     val privacyFlow: StateFlow<PrivacySettings> = _privacyFlow.asStateFlow()
 
     fun saveNickname(name: String) {
         prefs.edit().putString(KEY_NICKNAME, name.trim()).apply()
         _nicknameFlow.value = name.trim()
+    }
+
+    suspend fun refreshProfile(): Boolean {
+        return try {
+            val tokenManager = TokenManager(appContext)
+            val api = ApiClient.getUserApi(appContext, tokenManager)
+            val resp = api.getProfile()
+            if (resp.isSuccessful) {
+                resp.body()?.let { applyProfile(it) }
+                true
+            } else {
+                Log.w(TAG, "프로필 조회 실패 (HTTP ${resp.code()})")
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "프로필 조회 예외: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun updateNicknameWithServer(nickname: String): Boolean {
+        return try {
+            val tokenManager = TokenManager(appContext)
+            val api = ApiClient.getUserApi(appContext, tokenManager)
+            val resp = api.updateProfile(UpdateUserProfileRequest(nickname.trim()))
+            if (resp.isSuccessful) {
+                resp.body()?.let { applyProfile(it) }
+                true
+            } else {
+                Log.w(TAG, "닉네임 저장 실패 (HTTP ${resp.code()})")
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "닉네임 저장 예외: ${e.message}")
+            false
+        }
     }
 
     // ── 로그인 후 서버 데이터 복원 ────────────────────────────────────────────
@@ -612,6 +662,8 @@ class UserStatsStore private constructor(context: Context) {
         _transactionsFlow.value = emptyList()
         _statsFlow.value = UserStats()
         _nicknameFlow.value = ""
+        _friendCodeFlow.value = ""
+        _displayNameFlow.value = ""
         _privacyFlow.value = PrivacySettings()
     }
 
@@ -660,7 +712,40 @@ class UserStatsStore private constructor(context: Context) {
         )
 
         saveStats(newStats, current.transactions)
+        applyProfile(
+            UserProfileResponse(
+                id = null,
+                email = null,
+                nickname = serverStats.nickname,
+                friendCode = serverStats.friendCode,
+                displayName = serverStats.displayName
+            )
+        )
     }
+
+    private fun applyProfile(response: UserProfileResponse) {
+        val nickname = response.nickname?.trim().orEmpty()
+        val friendCode = response.friendCode?.trim().orEmpty()
+        val displayName = response.displayName?.trim().orEmpty()
+            .ifBlank { buildDisplayName(nickname, friendCode) }
+
+        prefs.edit()
+            .putString(KEY_NICKNAME, nickname)
+            .putString(KEY_FRIEND_CODE, friendCode)
+            .putString(KEY_DISPLAY_NAME, displayName)
+            .apply()
+
+        _nicknameFlow.value = nickname
+        _friendCodeFlow.value = friendCode
+        _displayNameFlow.value = displayName
+    }
+
+    private fun buildDisplayName(nickname: String, friendCode: String): String =
+        when {
+            nickname.isNotBlank() && friendCode.isNotBlank() -> "$nickname#$friendCode"
+            nickname.isNotBlank() -> nickname
+            else -> ""
+        }
 
     private fun loadPrivacy(): PrivacySettings =
         PrivacySettings(
@@ -739,6 +824,8 @@ class UserStatsStore private constructor(context: Context) {
         private const val KEY_CATEGORY_SPENDING_PREFIX = "key_category_spending_"
         private const val KEY_TRANSACTIONS = "key_transactions"
         private const val KEY_NICKNAME = "key_nickname"
+        private const val KEY_FRIEND_CODE = "key_friend_code"
+        private const val KEY_DISPLAY_NAME = "key_display_name"
         private const val KEY_SPENDING_VISIBILITY = "key_spending_visibility"
         private const val KEY_CHARACTER_VISIBILITY = "key_character_visibility"
         private val transactionDisplayFormatter = DateTimeFormatter.ofPattern("MM/dd HH:mm")

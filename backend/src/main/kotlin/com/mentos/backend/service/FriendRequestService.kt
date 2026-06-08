@@ -18,7 +18,8 @@ class FriendRequestService(
     private val userRepository: UserRepository,
     private val friendRepository: FriendRepository,
     private val friendRequestRepository: FriendRequestRepository,
-    private val characterService: CharacterService
+    private val characterService: CharacterService,
+    private val userProfileService: UserProfileService
 ) {
     @Transactional
     fun create(userId: Long, req: FriendRequestCreateRequest): FriendRequestResponse {
@@ -50,13 +51,13 @@ class FriendRequestService(
         return saved.toResponse()
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun received(userId: Long): List<FriendRequestResponse> =
         friendRequestRepository
             .findByReceiverIdAndStatusOrderByCreatedAtDesc(userId, FriendRequestStatus.PENDING)
             .map { it.toResponse() }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun sent(userId: Long): List<FriendRequestResponse> =
         friendRequestRepository
             .findByRequesterIdOrderByCreatedAtDesc(userId)
@@ -102,8 +103,8 @@ class FriendRequestService(
 
     private fun FriendRequest.toResponse(): FriendRequestResponse {
         val users = userRepository.findAllById(listOf(requesterId, receiverId)).associateBy { it.id }
-        val requester = users[requesterId]
-        val receiver = users[receiverId]
+        val requester = users[requesterId]?.let { userProfileService.ensureFriendCode(it) }
+        val receiver = users[receiverId]?.let { userProfileService.ensureFriendCode(it) }
         val requesterVisible = requester?.characterVisibility == VisibilityScope.FRIENDS &&
             friendRepository.existsByUserIdAndFriendId(receiverId, requesterId)
         val receiverVisible = receiver?.characterVisibility == VisibilityScope.FRIENDS &&
@@ -112,10 +113,14 @@ class FriendRequestService(
             id = id,
             requesterId = requesterId,
             requesterEmail = requester?.email,
-            requesterNickname = null,
+            requesterNickname = requester?.nickname,
+            requesterFriendCode = requester?.friendCode,
+            requesterDisplayName = userProfileService.displayName(requester),
             receiverId = receiverId,
             receiverEmail = receiver?.email,
-            receiverNickname = null,
+            receiverNickname = receiver?.nickname,
+            receiverFriendCode = receiver?.friendCode,
+            receiverDisplayName = userProfileService.displayName(receiver),
             requesterCharacterVisible = requesterVisible,
             requesterCharacterAppearance = if (requesterVisible) characterService.appearanceFor(requesterId) else null,
             receiverCharacterVisible = receiverVisible,

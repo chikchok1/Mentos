@@ -119,7 +119,7 @@ fun FriendsScreen(navController: NavController) {
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Rounded.Search, null, tint = Gray500) },
-                placeholder = { Text("이메일 또는 사용자 ID 검색") },
+                placeholder = { Text("닉네임, 친구 코드 또는 이메일로 검색") },
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Blue500)
             )
@@ -335,7 +335,7 @@ private fun SearchResultCard(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    displayName(result.nickname, result.email, result.id),
+                    displayName(result.displayName, result.nickname, result.friendCode, result.email, result.id),
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -367,6 +367,8 @@ private fun RequestCard(
     val id = if (received) request.requesterId else request.receiverId
     val email = if (received) request.requesterEmail else request.receiverEmail
     val nickname = if (received) request.requesterNickname else request.receiverNickname
+    val friendCode = if (received) request.requesterFriendCode else request.receiverFriendCode
+    val serverDisplayName = if (received) request.requesterDisplayName else request.receiverDisplayName
     val characterVisible = if (received) {
         request.requesterCharacterVisible == true
     } else {
@@ -383,7 +385,7 @@ private fun RequestCard(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    displayName(nickname, email, id),
+                    displayName(serverDisplayName, nickname, friendCode, email, id),
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -419,7 +421,7 @@ private fun FriendCard(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    displayName(friend.nickname, friend.email, friend.friendId),
+                    displayName(friend.displayName, friend.nickname, friend.friendCode, friend.email, friend.friendId),
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -481,7 +483,7 @@ private fun ComparisonUserCard(label: String, user: ComparisonUserResponse, modi
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                displayName(user.nickname, user.email, user.id),
+                displayName(user.displayName, user.nickname, user.friendCode, user.email, user.id),
                 color = Gray900,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -635,6 +637,27 @@ private fun StatusChip(text: String) {
     )
 }
 
+private fun displayName(
+    displayName: String?,
+    nickname: String?,
+    friendCode: String?,
+    email: String?,
+    id: Long?
+): String {
+    val serverName = displayName?.trim()?.takeIf { it.isNotBlank() }
+    if (serverName != null) return serverName
+
+    val cleanNickname = nickname?.trim()?.takeIf { it.isNotBlank() }
+    val cleanFriendCode = friendCode?.trim()?.takeIf { it.isNotBlank() }
+    if (cleanNickname != null && cleanFriendCode != null) return "$cleanNickname#$cleanFriendCode"
+    if (cleanNickname != null) return cleanNickname
+
+    val cleanEmail = email?.trim()?.takeIf { it.isNotBlank() }
+    val emailPrefix = cleanEmail?.substringBefore("@")?.takeIf { it.isNotBlank() }
+    return emailPrefix ?: cleanEmail ?: id?.let { "User $it" } ?: "User"
+}
+
+/*
 private fun displayName(nickname: String?, email: String?, id: Long?): String =
     nickname?.takeIf { it.isNotBlank() }
         ?: email?.takeIf { it.isNotBlank() }
@@ -642,3 +665,10 @@ private fun displayName(nickname: String?, email: String?, id: Long?): String =
         ?: "사용자"
 
 private fun formatWon(amount: Long): String = "${String.format("%,d", amount)}원"
+*/
+/*
+
+private fun formatWon(amount: Long): String = "${String.format("%,d", amount)}원"
+*/
+
+private fun formatWon(amount: Long): String = "${String.format("%,d", amount)} KRW"

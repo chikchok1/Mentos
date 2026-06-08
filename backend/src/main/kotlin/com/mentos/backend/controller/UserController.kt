@@ -3,8 +3,10 @@ package com.mentos.backend.controller
 import com.mentos.backend.dto.PrivacySettingsRequest
 import com.mentos.backend.dto.UpdateCharacterRequest
 import com.mentos.backend.dto.UpdateBudgetRequest
+import com.mentos.backend.dto.UpdateUserProfileRequest
 import com.mentos.backend.security.JwtProvider
 import com.mentos.backend.service.CharacterService
+import com.mentos.backend.service.UserProfileService
 import com.mentos.backend.service.UserStatsService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/users/me")
 class UserController(
     private val userStatsService: UserStatsService,
+    private val userProfileService: UserProfileService,
     private val characterService: CharacterService,
     private val jwtProvider: JwtProvider
 ) {
@@ -28,6 +31,29 @@ class UserController(
             ?: return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
 
         return ResponseEntity.ok(userStatsService.getStats(userId))
+    }
+
+    @GetMapping("/profile")
+    fun getProfile(@RequestHeader("Authorization") authHeader: String?): ResponseEntity<Any> {
+        val userId = resolveUserId(authHeader)
+            ?: return ResponseEntity.status(401).body(mapOf("error" to "?좏슚?섏? ?딆? ?좏겙?낅땲??"))
+
+        return ResponseEntity.ok(userProfileService.getProfile(userId))
+    }
+
+    @PatchMapping("/profile")
+    fun updateProfile(
+        @RequestHeader("Authorization") authHeader: String?,
+        @RequestBody req: UpdateUserProfileRequest
+    ): ResponseEntity<Any> {
+        val userId = resolveUserId(authHeader)
+            ?: return ResponseEntity.status(401).body(mapOf("error" to "?좏슚?섏? ?딆? ?좏겙?낅땲??"))
+
+        return try {
+            ResponseEntity.ok(userProfileService.updateProfile(userId, req))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "닉네임 저장에 실패했습니다.")))
+        }
     }
 
     @PatchMapping("/budget")

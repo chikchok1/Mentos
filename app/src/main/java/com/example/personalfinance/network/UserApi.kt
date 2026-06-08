@@ -17,7 +17,10 @@ data class UserStatsResponse(
     val jobReason: String,
     val jobMonth: String,
     val thisMonthSpending: Long,
-    val categorySpending: Map<String, Long>
+    val categorySpending: Map<String, Long>,
+    val nickname: String?,
+    val friendCode: String?,
+    val displayName: String?
 )
 
 data class UpdateBudgetRequest(
@@ -32,6 +35,18 @@ data class PrivacySettingsRequest(
 data class PrivacySettingsResponse(
     val spendingVisibility: String,
     val characterVisibility: String
+)
+
+data class UserProfileResponse(
+    val id: Long?,
+    val email: String?,
+    val nickname: String?,
+    val friendCode: String?,
+    val displayName: String?
+)
+
+data class UpdateUserProfileRequest(
+    val nickname: String?
 )
 
 data class EquippedItemDto(
@@ -52,6 +67,14 @@ data class UpdateCharacterRequest(
 interface UserApi {
     @GET("api/users/me/stats")
     suspend fun getStats(): Response<UserStatsResponse>
+
+    @GET("api/users/me/profile")
+    suspend fun getProfile(): Response<UserProfileResponse>
+
+    @PATCH("api/users/me/profile")
+    suspend fun updateProfile(
+        @Body req: UpdateUserProfileRequest
+    ): Response<UserProfileResponse>
 
     @PATCH("api/users/me/budget")
     suspend fun updateBudget(

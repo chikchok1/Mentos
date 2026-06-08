@@ -14,12 +14,13 @@ import java.time.YearMonth
 @Service
 class UserStatsService(
     private val userRepository: UserRepository,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val userProfileService: UserProfileService
 ) {
-    @Transactional(readOnly = true)
+    @Transactional
     fun getStats(userId: Long): UserStatsResponse {
         val month = currentMonth()
-        val user = findUser(userId)
+        val user = userProfileService.ensureFriendCode(findUser(userId))
         return user.toStatsResponse(categorySpending(userId, month), month)
     }
 
@@ -27,16 +28,16 @@ class UserStatsService(
     fun updateBudget(userId: Long, monthlyBudget: Long): UserStatsResponse {
         require(monthlyBudget > 0L) { "월 예산은 0원보다 커야 합니다." }
         val month = currentMonth()
-        val user = findUser(userId)
+        val user = userProfileService.ensureFriendCode(findUser(userId))
         user.monthlyBudget = monthlyBudget
         val categorySpending = categorySpending(userId, month)
         refreshCurrentMonthJob(user, categorySpending, month)
         return userRepository.save(user).toStatsResponse(categorySpending, month)
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun getPrivacy(userId: Long): PrivacySettingsResponse {
-        val user = findUser(userId)
+        val user = userProfileService.ensureFriendCode(findUser(userId))
         return user.toPrivacyResponse()
     }
 
@@ -46,7 +47,7 @@ class UserStatsService(
         spendingVisibility: String,
         characterVisibility: String
     ): PrivacySettingsResponse {
-        val user = findUser(userId)
+        val user = userProfileService.ensureFriendCode(findUser(userId))
         user.spendingVisibility = parseVisibility(spendingVisibility, allowPrivate = true)
         user.characterVisibility = parseVisibility(characterVisibility, allowPrivate = true)
         return userRepository.save(user).toPrivacyResponse()
@@ -224,7 +225,10 @@ class UserStatsService(
         jobReason = jobReason,
         jobMonth = jobMonth.ifBlank { month.toString() },
         thisMonthSpending = categorySpending.values.sum(),
-        categorySpending = categorySpending
+        categorySpending = categorySpending,
+        nickname = nickname,
+        friendCode = friendCode,
+        displayName = userProfileService.displayName(this)
     )
 
     private val levelThresholds = listOf(
