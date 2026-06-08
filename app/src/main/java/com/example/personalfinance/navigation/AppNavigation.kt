@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.personalfinance.data.TokenManager
+import com.example.personalfinance.data.CharacterAppearanceStore
 import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.network.ApiClient
 import org.json.JSONObject
@@ -32,6 +33,8 @@ import com.example.personalfinance.ui.main.InventoryScreen
 import com.example.personalfinance.ui.main.ShopScreen
 import com.example.personalfinance.ui.auth.LoginScreen
 import com.example.personalfinance.ui.main.CharacterLayerTestScreen
+import com.example.personalfinance.ui.main.FriendComparisonScreen
+import com.example.personalfinance.ui.main.FriendsScreen
 import com.example.personalfinance.ui.main.GachaDebugScreen
 import com.example.personalfinance.ui.main.ProfileScreen
 
@@ -46,6 +49,10 @@ sealed class Screen(val route: String) {
     object Inventory : Screen("inventory")
     object Shop      : Screen("shop")
     object Profile   : Screen("profile")
+    object Friends   : Screen("friends")
+    object FriendComparison : Screen("friends/{friendId}/comparison") {
+        fun route(friendId: Long): String = "friends/$friendId/comparison"
+    }
     object NotificationDebug : Screen("notification_debug")
     object CharacterLayerTest : Screen("character_layer_test")
     object GachaDebug : Screen("gacha_debug")
@@ -67,6 +74,7 @@ fun AppNavigation(tokenManager: TokenManager) {
             // 앱 재시작 시(토큰 있음) 서버에서 거래 내역 복원
             withContext(Dispatchers.IO) {
                 UserStatsStore.getInstance(context).restoreFromServer()
+                CharacterAppearanceStore.getInstance(context).restoreFromServer()
             }
         }
     }
@@ -103,6 +111,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                                         tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
                                         extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
                                         UserStatsStore.getInstance(context).restoreFromServer()
+                                        CharacterAppearanceStore.getInstance(context).restoreFromServer()
                                         navController.navigate(Screen.Home.route) {
                                             popUpTo(Screen.Login.route) { inclusive = true }
                                         }
@@ -138,6 +147,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                                             tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
                                             extractUserIdFromJwt(authData.accessToken)?.let { tokenManager.saveUserId(it) }
                                             UserStatsStore.getInstance(context).restoreFromServer()
+                                            CharacterAppearanceStore.getInstance(context).restoreFromServer()
                                             navController.navigate(Screen.Home.route) {
                                                 popUpTo(Screen.Login.route) { inclusive = true }
                                             }
@@ -171,6 +181,7 @@ fun AppNavigation(tokenManager: TokenManager) {
                 },
                 onLogout = {
                     UserStatsStore.getInstance(context).clearForLogout()
+                    CharacterAppearanceStore.getInstance(context).clearForLogout()
                     tokenManager.clearTokens()
                     ApiClient.reset()
                     navController.navigate(Screen.Login.route) {
@@ -180,6 +191,11 @@ fun AppNavigation(tokenManager: TokenManager) {
             )      
         }
         composable(Screen.Profile.route)              { ProfileScreen(navController)              }
+        composable(Screen.Friends.route)              { FriendsScreen(navController)              }
+        composable(Screen.FriendComparison.route) { backStackEntry ->
+            val friendId = backStackEntry.arguments?.getString("friendId")?.toLongOrNull() ?: 0L
+            FriendComparisonScreen(navController, friendId)
+        }
         composable(Screen.NotificationDebug.route)    { NotificationDebugScreen(navController)    }
         composable(Screen.Gacha.route)                { GachaScreen(navController)                }
         composable(Screen.Inventory.route)            { InventoryScreen(navController)            }

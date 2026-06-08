@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.example.personalfinance.network.ApiClient
+import com.example.personalfinance.network.PrivacySettingsRequest
+import com.example.personalfinance.network.PrivacySettingsResponse
 import com.example.personalfinance.network.SaveTransactionRequest
 import com.example.personalfinance.network.UpdateCategoryByClientIdRequest
 import com.example.personalfinance.network.UpdateBudgetRequest
@@ -44,6 +46,11 @@ data class UserStats(
             ?.key
             ?: ExpenseCategoryClassifier.CATEGORY_OTHER
 }
+
+data class PrivacySettings(
+    val spendingVisibility: String = "PRIVATE",
+    val characterVisibility: String = "FRIENDS"
+)
 
 object UserStatsCalculator {
     private val levelThresholds = listOf(
@@ -207,6 +214,9 @@ class UserStatsStore private constructor(context: Context) {
     private val _nicknameFlow = MutableStateFlow(prefs.getString(KEY_NICKNAME, "") ?: "")
     val nicknameFlow: StateFlow<String> = _nicknameFlow.asStateFlow()
 
+    private val _privacyFlow = MutableStateFlow(loadPrivacy())
+    val privacyFlow: StateFlow<PrivacySettings> = _privacyFlow.asStateFlow()
+
     fun saveNickname(name: String) {
         prefs.edit().putString(KEY_NICKNAME, name.trim()).apply()
         _nicknameFlow.value = name.trim()
@@ -302,6 +312,67 @@ class UserStatsStore private constructor(context: Context) {
             }
         } catch (e: Exception) {
             Log.w(TAG, "서버 통계 조회 예외 (로컬 fallback 유지): ${e.message}")
+            false
+        }
+    }
+
+    suspend fun refreshPrivacy(): Boolean {
+        return try {
+            val tokenManager = TokenManager(appContext)
+            val api = ApiClient.getUserApi(appContext, tokenManager)
+            val resp = api.getPrivacy()
+            if (resp.isSuccessful) {
+                resp.body()?.let { applyPrivacy(it) }
+                true
+            } else {
+                Log.w(TAG, "공개 설정 조회 실패 (HTTP ${resp.code()})")
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "공개 설정 조회 예외: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun updateSpendingVisibility(visibleToFriends: Boolean): Boolean {
+        val nextSpending = if (visibleToFriends) "FRIENDS" else "PRIVATE"
+        return updatePrivacy(
+            PrivacySettings(
+                spendingVisibility = nextSpending,
+                characterVisibility = _privacyFlow.value.characterVisibility
+            )
+        )
+    }
+
+    suspend fun updateCharacterVisibility(visibleToFriends: Boolean): Boolean {
+        val nextCharacter = if (visibleToFriends) "FRIENDS" else "PRIVATE"
+        return updatePrivacy(
+            PrivacySettings(
+                spendingVisibility = _privacyFlow.value.spendingVisibility,
+                characterVisibility = nextCharacter
+            )
+        )
+    }
+
+    private suspend fun updatePrivacy(settings: PrivacySettings): Boolean {
+        return try {
+            val tokenManager = TokenManager(appContext)
+            val api = ApiClient.getUserApi(appContext, tokenManager)
+            val resp = api.updatePrivacy(
+                PrivacySettingsRequest(
+                    spendingVisibility = settings.spendingVisibility,
+                    characterVisibility = settings.characterVisibility
+                )
+            )
+            if (resp.isSuccessful) {
+                resp.body()?.let { applyPrivacy(it) }
+                true
+            } else {
+                Log.w(TAG, "공개 설정 변경 실패 (HTTP ${resp.code()})")
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "공개 설정 변경 예외: ${e.message}")
             false
         }
     }
@@ -541,6 +612,7 @@ class UserStatsStore private constructor(context: Context) {
         _transactionsFlow.value = emptyList()
         _statsFlow.value = UserStats()
         _nicknameFlow.value = ""
+        _privacyFlow.value = PrivacySettings()
     }
 
     private fun loadTransactions(): List<Transaction> =
@@ -588,6 +660,24 @@ class UserStatsStore private constructor(context: Context) {
         )
 
         saveStats(newStats, current.transactions)
+    }
+
+    private fun loadPrivacy(): PrivacySettings =
+        PrivacySettings(
+            spendingVisibility = prefs.getString(KEY_SPENDING_VISIBILITY, "PRIVATE") ?: "PRIVATE",
+            characterVisibility = prefs.getString(KEY_CHARACTER_VISIBILITY, "FRIENDS") ?: "FRIENDS"
+        )
+
+    private fun applyPrivacy(response: PrivacySettingsResponse) {
+        val settings = PrivacySettings(
+            spendingVisibility = response.spendingVisibility,
+            characterVisibility = response.characterVisibility
+        )
+        prefs.edit()
+            .putString(KEY_SPENDING_VISIBILITY, settings.spendingVisibility)
+            .putString(KEY_CHARACTER_VISIBILITY, settings.characterVisibility)
+            .apply()
+        _privacyFlow.value = settings
     }
 
     private fun categorySpendingKey(category: String): String =
@@ -649,6 +739,8 @@ class UserStatsStore private constructor(context: Context) {
         private const val KEY_CATEGORY_SPENDING_PREFIX = "key_category_spending_"
         private const val KEY_TRANSACTIONS = "key_transactions"
         private const val KEY_NICKNAME = "key_nickname"
+        private const val KEY_SPENDING_VISIBILITY = "key_spending_visibility"
+        private const val KEY_CHARACTER_VISIBILITY = "key_character_visibility"
         private val transactionDisplayFormatter = DateTimeFormatter.ofPattern("MM/dd HH:mm")
 
         @Volatile

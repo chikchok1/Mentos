@@ -1,8 +1,10 @@
 package com.mentos.backend.service
 
+import com.mentos.backend.dto.PrivacySettingsResponse
 import com.mentos.backend.dto.UserStatsResponse
 import com.mentos.backend.entity.Transaction
 import com.mentos.backend.entity.User
+import com.mentos.backend.entity.VisibilityScope
 import com.mentos.backend.repository.TransactionRepository
 import com.mentos.backend.repository.UserRepository
 import org.springframework.stereotype.Service
@@ -30,6 +32,24 @@ class UserStatsService(
         val categorySpending = categorySpending(userId, month)
         refreshCurrentMonthJob(user, categorySpending, month)
         return userRepository.save(user).toStatsResponse(categorySpending, month)
+    }
+
+    @Transactional(readOnly = true)
+    fun getPrivacy(userId: Long): PrivacySettingsResponse {
+        val user = findUser(userId)
+        return user.toPrivacyResponse()
+    }
+
+    @Transactional
+    fun updatePrivacy(
+        userId: Long,
+        spendingVisibility: String,
+        characterVisibility: String
+    ): PrivacySettingsResponse {
+        val user = findUser(userId)
+        user.spendingVisibility = parseVisibility(spendingVisibility, allowPrivate = true)
+        user.characterVisibility = parseVisibility(characterVisibility, allowPrivate = true)
+        return userRepository.save(user).toPrivacyResponse()
     }
 
     @Transactional
@@ -71,6 +91,22 @@ class UserStatsService(
     private fun findUser(userId: Long): User =
         userRepository.findById(userId)
             .orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
+
+    private fun parseVisibility(value: String, allowPrivate: Boolean): VisibilityScope {
+        val normalized = value.trim().uppercase()
+        val parsed = runCatching { VisibilityScope.valueOf(normalized) }
+            .getOrElse { throw IllegalArgumentException("지원하지 않는 공개 범위입니다: $value") }
+        if (!allowPrivate && parsed == VisibilityScope.PRIVATE) {
+            throw IllegalArgumentException("캐릭터 공개 범위는 FRIENDS만 지원합니다.")
+        }
+        return parsed
+    }
+
+    private fun User.toPrivacyResponse(): PrivacySettingsResponse =
+        PrivacySettingsResponse(
+            spendingVisibility = spendingVisibility.name,
+            characterVisibility = characterVisibility.name
+        )
 
     private fun calculateEarnedXp(
         amount: Long,

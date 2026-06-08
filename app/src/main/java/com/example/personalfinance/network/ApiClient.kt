@@ -55,6 +55,8 @@ object ApiClient {
     private var userApi: UserApi? = null
     private var notificationParseLogApi: NotificationParseLogApi? = null
     private var shopApi: ShopApi? = null
+    private var friendApi: FriendApi? = null
+    private var friendRequestApi: FriendRequestApi? = null
 
     @Synchronized
     fun getGachaApi(context: Context, tokenManager: TokenManager): GachaApi {
@@ -113,6 +115,24 @@ object ApiClient {
         return shopApi!!
     }
 
+    @Synchronized
+    fun getFriendApi(context: Context, tokenManager: TokenManager): FriendApi {
+        getAuthApi(context, tokenManager)
+        if (friendApi == null) {
+            friendApi = retrofit!!.create(FriendApi::class.java)
+        }
+        return friendApi!!
+    }
+
+    @Synchronized
+    fun getFriendRequestApi(context: Context, tokenManager: TokenManager): FriendRequestApi {
+        getAuthApi(context, tokenManager)
+        if (friendRequestApi == null) {
+            friendRequestApi = retrofit!!.create(FriendRequestApi::class.java)
+        }
+        return friendRequestApi!!
+    }
+
     /** 로그아웃 시 호출 — 캐시된 API 인스턴스 및 Retrofit 초기화 */
     @Synchronized
     fun reset() {
@@ -124,5 +144,7 @@ object ApiClient {
         userApi          = null
         notificationParseLogApi = null
         shopApi          = null
+        friendApi        = null
+        friendRequestApi = null
     }
 }

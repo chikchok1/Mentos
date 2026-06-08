@@ -117,6 +117,7 @@ fun MenuScreen(
                         .background(Gray50)
                         .clickable {
                             when (item.id) {
+                                "friends"   -> navController.navigate(com.example.personalfinance.navigation.Screen.Friends.route)
                                 "shop"      -> navController.navigate(com.example.personalfinance.navigation.Screen.Shop.route)
                                 "gacha"     -> navController.navigate(com.example.personalfinance.navigation.Screen.Gacha.route)
                                 "inventory" -> navController.navigate(com.example.personalfinance.navigation.Screen.Inventory.route)

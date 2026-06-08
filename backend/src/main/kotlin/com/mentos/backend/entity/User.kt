@@ -53,6 +53,14 @@ class User(
     @Column(nullable = false, length = 7)
     var jobMonth: String = YearMonth.now().toString(),
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    var spendingVisibility: VisibilityScope = VisibilityScope.PRIVATE,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    var characterVisibility: VisibilityScope = VisibilityScope.FRIENDS,
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
         name = "user_owned_items",
