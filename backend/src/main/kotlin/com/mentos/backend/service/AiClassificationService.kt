@@ -36,8 +36,12 @@ class AiClassificationService(
         // 2. 카카오맵 API 호출
         val kakaoCategory = getKakaoCategory(safeMerchantName)
 
-        // 3. 카테고리를 찾지 못했으면 원본 텍스트로 AI 요청
-        val textToClassify = kakaoCategory ?: safeMerchantName
+        // 3. 상호명 + 카카오 카테고리(있으면)를 함께 전달해 맥락 손실 방지
+        val textToClassify = if (kakaoCategory != null) {
+            "상호명: $safeMerchantName, 카카오 업종: $kakaoCategory"
+        } else {
+            "상호명: $safeMerchantName"
+        }
 
         // 4. Gemini API로 7개 카테고리 중 하나로 분류
         val finalCategory = askGemini(textToClassify)
@@ -62,7 +66,13 @@ class AiClassificationService(
                 val rootNode = objectMapper.readTree(responseBody)
                 val documents = rootNode.path("documents")
                 if (documents.isArray && !documents.isEmpty) {
-                    return sanitizeClassificationInput(documents[0].path("category_name").asText())
+                    // 상위 3개 결과의 category_name 빈도를 집계해 다수결로 선택
+                    val votes = (0 until minOf(documents.size(), 3))
+                        .map { sanitizeClassificationInput(documents[it].path("category_name").asText()) }
+                        .filter { it.isNotBlank() }
+                        .groupingBy { it }
+                        .eachCount()
+                    return votes.maxByOrNull { it.value }?.key
                 }
             }
         } catch (e: Exception) {
@@ -120,7 +130,45 @@ class AiClassificationService(
 
     private fun normalizeGeminiCategory(output: String): String {
         val sanitizedOutput = sanitizeClassificationInput(output)
-        return VALID_CATEGORIES.firstOrNull { sanitizedOutput == it } ?: DEFAULT_CATEGORY
+
+        // 1단계: 정확 일치
+        VALID_CATEGORIES.firstOrNull { sanitizedOutput == it }?.let { return it }
+
+        // 2단계: 포함 일치 (Gemini가 번호나 부가 설명을 붙인 경우 대응)
+        VALID_CATEGORIES.firstOrNull { sanitizedOutput.contains(it) }?.let { return it }
+
+        // 3단계: 핵심 키워드 매핑
+        val keywordMap = mapOf(
+            "식비" to "식비/카페", "카페" to "식비/카페", "음식" to "식비/카페",
+            "한식" to "식비/카페", "양식" to "식비/카페", "일식" to "식비/카페",
+            "중식" to "식비/카페", "분식" to "식비/카페", "베이커리" to "식비/카페",
+            "마트" to "생활/마트", "생활" to "생활/마트", "편의점" to "생활/마트",
+            "슈퍼" to "생활/마트", "잡화" to "생활/마트",
+            "쇼핑" to "쇼핑/온라인", "온라인" to "쇼핑/온라인", "배달" to "쇼핑/온라인",
+            "문화" to "문화/여가", "여가" to "문화/여가", "영화" to "문화/여가",
+            "여행" to "문화/여가", "스포츠" to "문화/여가", "레저" to "문화/여가",
+            "고정" to "고정비/구독", "구독" to "고정비/구독", "통신" to "고정비/구독",
+            "보험" to "고정비/구독", "공과금" to "고정비/구독",
+            "건강" to "건강/의료", "의료" to "건강/의료", "병원" to "건강/의료",
+            "약국" to "건강/의료", "헬스" to "건강/의료"
+        )
+        keywordMap.entries.firstOrNull { sanitizedOutput.contains(it.key) }?.let { return it.value }
+
+        return DEFAULT_CATEGORY
+    }
+
+    /**
+     * 사용자가 카테고리를 수동으로 수정했을 때 캐시를 동기화합니다.
+     * TransactionService 등에서 updateCategory 호출 시 함께 호출하세요.
+     */
+    @Transactional
+    fun updateCategoryCache(merchantName: String, newCategory: String) {
+        val safeName = sanitizeClassificationInput(merchantName)
+        if (safeName.isBlank()) return
+        val cached = cacheRepository.findByMerchantName(safeName) ?: return
+        if (cached.category != newCategory) {
+            cacheRepository.save(cached.copy(category = newCategory))
+        }
     }
 
     private fun sanitizeClassificationInput(value: String): String =
