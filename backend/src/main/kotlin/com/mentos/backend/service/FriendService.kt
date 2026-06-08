@@ -22,14 +22,16 @@ class FriendService(
     private val friendRepository: FriendRepository,
     private val friendRequestRepository: FriendRequestRepository,
     private val transactionRepository: TransactionRepository,
-    private val characterService: CharacterService
+    private val characterService: CharacterService,
+    private val userProfileService: UserProfileService
 ) {
-    @Transactional(readOnly = true)
+    @Transactional
     fun search(currentUserId: Long, keyword: String): List<FriendSearchResponse> {
         val normalized = keyword.trim()
         if (normalized.isBlank()) return emptyList()
 
-        return userRepository.searchFriends(normalized, currentUserId).map { user ->
+        return searchUsers(currentUserId, normalized).map { foundUser ->
+            val user = userProfileService.ensureFriendCode(foundUser)
             val alreadyFriend = friendRepository.existsByUserIdAndFriendId(currentUserId, user.id)
             val pending = friendRequestRepository
                 .findPendingBetween(currentUserId, user.id, FriendRequestStatus.PENDING)
@@ -45,7 +47,9 @@ class FriendService(
             FriendSearchResponse(
                 id = user.id,
                 email = user.email,
-                nickname = null,
+                nickname = user.nickname,
+                friendCode = user.friendCode,
+                displayName = userProfileService.displayName(user),
                 level = if (characterVisible) user.level else null,
                 totalXp = if (characterVisible) user.totalXp else null,
                 currentXp = if (characterVisible) user.currentXp else null,
@@ -62,14 +66,16 @@ class FriendService(
         }
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun getFriends(userId: Long): List<FriendResponse> {
         val friendIds = friendRepository.findByUserIdOrderByCreatedAtDesc(userId).map { it.friendId }
         if (friendIds.isEmpty()) return emptyList()
         val friendsById = userRepository.findAllById(friendIds).associateBy { it.id }
 
         return friendIds.mapNotNull { friendId ->
-            friendsById[friendId]?.let { user -> user.toFriendResponse(includeSpending = true) }
+            friendsById[friendId]?.let { user ->
+                userProfileService.ensureFriendCode(user).toFriendResponse(includeSpending = true)
+            }
         }
     }
 
@@ -82,13 +88,13 @@ class FriendService(
         friendRepository.deleteByUserIdAndFriendId(friendId, userId)
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun compare(userId: Long, friendId: Long): FriendComparisonResponse {
         if (!friendRepository.existsByUserIdAndFriendId(userId, friendId)) {
             throw IllegalAccessException("친구만 비교할 수 있습니다.")
         }
-        val me = findUser(userId)
-        val friend = findUser(friendId)
+        val me = userProfileService.ensureFriendCode(findUser(userId))
+        val friend = userProfileService.ensureFriendCode(findUser(friendId))
         val month = YearMonth.now()
 
         return FriendComparisonResponse(
@@ -112,6 +118,33 @@ class FriendService(
         userRepository.findById(userId)
             .orElseThrow { NoSuchElementException("사용자를 찾을 수 없습니다.") }
 
+    private fun searchUsers(currentUserId: Long, keyword: String): List<User> {
+        val results = LinkedHashMap<Long, User>()
+        fun add(user: User?) {
+            if (user != null && user.id != currentUserId) results.putIfAbsent(user.id, user)
+        }
+        fun addAll(users: List<User>) = users.forEach(::add)
+
+        val sharpIndex = keyword.lastIndexOf('#')
+        if (sharpIndex > 0 && sharpIndex < keyword.lastIndex) {
+            val nickname = keyword.substring(0, sharpIndex).trim()
+            val code = keyword.substring(sharpIndex + 1).trim()
+            if (nickname.isNotBlank() && code.matches(friendCodePattern)) {
+                addAll(userRepository.findByNicknameIgnoreCaseAndFriendCodeAndIdNot(nickname, code, currentUserId))
+            }
+        }
+
+        if (keyword.matches(friendCodePattern)) {
+            add(userRepository.findByFriendCodeAndIdNot(keyword, currentUserId))
+        }
+
+        addAll(userRepository.searchByEmailKeyword(keyword, currentUserId))
+        addAll(userRepository.searchByNicknameKeyword(keyword, currentUserId))
+        keyword.toLongOrNull()?.let { id -> add(userRepository.findOtherById(id, currentUserId)) }
+
+        return results.values.take(30)
+    }
+
     private fun User.toFriendResponse(includeSpending: Boolean): FriendResponse {
         val characterVisible = characterVisibility == VisibilityScope.FRIENDS
         val spendingVisible = includeSpending && spendingVisibility == VisibilityScope.FRIENDS
@@ -121,7 +154,9 @@ class FriendService(
         return FriendResponse(
             friendId = id,
             email = email,
-            nickname = null,
+            nickname = nickname,
+            friendCode = friendCode,
+            displayName = userProfileService.displayName(this),
             level = if (characterVisible) level else null,
             totalXp = if (characterVisible) totalXp else null,
             currentXp = if (characterVisible) currentXp else null,
@@ -148,7 +183,9 @@ class FriendService(
         return ComparisonUserResponse(
             id = id,
             email = email,
-            nickname = null,
+            nickname = nickname,
+            friendCode = friendCode,
+            displayName = userProfileService.displayName(this),
             level = if (characterVisible) level else null,
             totalXp = if (characterVisible) totalXp else null,
             currentXp = if (characterVisible) currentXp else null,
@@ -193,4 +230,6 @@ class FriendService(
             fun empty() = MonthlySpendingStats(0L, emptyList())
         }
     }
+
+    private val friendCodePattern = Regex("""\d{4,6}""")
 }

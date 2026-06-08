@@ -20,6 +20,12 @@ class User(
     @Column(nullable = true)
     var email: String? = null,
 
+    @Column(nullable = true, length = 30)
+    var nickname: String? = null,
+
+    @Column(name = "friend_code", nullable = true, unique = true, length = 10)
+    var friendCode: String? = null,
+
     @Column(nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
