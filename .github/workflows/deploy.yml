@@ -36,6 +36,7 @@ jobs:
           source: "backend/build/libs/backend-0.0.1-SNAPSHOT.jar"
           target: "/home/${{ secrets.GCP_USER }}/mentos/"
           strip_components: 3
+          overwrite: true
 
       - name: Restart server
         uses: appleboy/ssh-action@v1.0.3
@@ -43,4 +44,6 @@ jobs:
           host: ${{ secrets.GCP_HOST }}
           username: ${{ secrets.GCP_USER }}
           key: ${{ secrets.GCP_SSH_KEY }}
-          script: sudo systemctl restart mentos
+          script: |
+            sudo systemctl restart mentos.service
+            sudo systemctl status mentos.service --no-pager
