@@ -21,7 +21,12 @@ class UserStatsService(
     fun getStats(userId: Long): UserStatsResponse {
         val month = currentMonth()
         val user = userProfileService.ensureFriendCode(findUser(userId))
-        return user.toStatsResponse(categorySpending(userId, month), month)
+        val categorySpending = categorySpending(userId, month)
+        if (user.jobMonth != month.toString()) {
+            refreshCurrentMonthJob(user, categorySpending, month)
+            userRepository.save(user)
+        }
+        return user.toStatsResponse(categorySpending, month)
     }
 
     @Transactional
@@ -65,7 +70,7 @@ class UserStatsService(
             val ym = YearMonth.from(tx.occurredAt)
             val spendingAfterTransaction = (monthlySpending[ym] ?: 0L) + tx.amount
             monthlySpending[ym] = spendingAfterTransaction
-            totalXp += calculateEarnedXp(tx.amount, spendingAfterTransaction, user.monthlyBudget)
+            totalXp += calculateEarnedXp(tx.amount, tx.category, spendingAfterTransaction, user.monthlyBudget)
         }
 
         applyLevelState(user, totalXp)
@@ -80,7 +85,7 @@ class UserStatsService(
         val user = findUser(userId)
         val transactionMonth = YearMonth.from(transaction.occurredAt)
         val monthlySpending = categorySpending(userId, transactionMonth).values.sum()
-        val earnedXp = calculateEarnedXp(transaction.amount, monthlySpending, user.monthlyBudget)
+        val earnedXp = calculateEarnedXp(transaction.amount, transaction.category, monthlySpending, user.monthlyBudget)
 
         applyLevelState(user, user.totalXp + earnedXp)
 
@@ -111,6 +116,7 @@ class UserStatsService(
 
     private fun calculateEarnedXp(
         amount: Long,
+        category: String,
         thisMonthSpending: Long,
         monthlyBudget: Long
     ): Int {
@@ -118,7 +124,7 @@ class UserStatsService(
         val amountXp = ((amount.coerceAtLeast(0L) / 10_000L) * 10L)
             .coerceAtMost(100L)
             .toInt()
-        val rawXp = baseXp + amountXp
+        val rawXp = ((baseXp + amountXp) * categoryXpWeight(category)).toInt().coerceAtLeast(1)
         val budgetRatio = if (monthlyBudget > 0L) {
             thisMonthSpending.toDouble() / monthlyBudget.toDouble()
         } else {
@@ -129,6 +135,42 @@ class UserStatsService(
             budgetRatio > 1.0 -> 5
             budgetRatio > 0.8 -> (rawXp * 0.5).toInt().coerceAtLeast(5)
             else -> rawXp
+        }
+    }
+
+    private fun categoryXpWeight(category: String): Double {
+        val normalized = category
+            .trim()
+            .lowercase()
+            .replace(Regex("""[\s_\-/·]"""), "")
+
+        return when {
+            normalized == "식비카페" -> 1.0
+            normalized.contains("study") ||
+                normalized.contains("education") ||
+                normalized.contains("edu") ||
+                normalized.contains("교육") ||
+                normalized.contains("학습") -> 1.2
+            normalized.contains("health") ||
+                normalized.contains("medical") ||
+                normalized.contains("병원") ||
+                normalized.contains("의료") ||
+                normalized.contains("건강") -> 1.2
+            normalized.contains("shopping") ||
+                normalized.contains("shop") ||
+                normalized.contains("online") ||
+                normalized.contains("쇼핑") ||
+                normalized.contains("온라인") -> 0.8
+            normalized.contains("entertainment") ||
+                normalized.contains("culture") ||
+                normalized.contains("leisure") ||
+                normalized.contains("문화") ||
+                normalized.contains("여가") -> 0.9
+            normalized.contains("cafe") ||
+                normalized.contains("coffee") ||
+                normalized.contains("카페") ||
+                normalized.contains("커피") -> 0.9
+            else -> 1.0
         }
     }
 

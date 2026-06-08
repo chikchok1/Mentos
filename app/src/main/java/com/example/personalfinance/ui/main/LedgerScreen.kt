@@ -953,26 +953,28 @@ private fun LedgerTab(
     val today = LocalDate.now()
     val isThisMonth = currentMonth.year == today.year && currentMonth.monthValue == today.monthValue
     var selectedDay by remember(currentMonth) {
-        mutableStateOf(if (isThisMonth) today.dayOfMonth.coerceIn(1, currentMonth.lengthOfMonth()) else null)
+        mutableStateOf<Int?>(null)
     }
-    var isAllTransactionsExpanded by remember(currentMonth, selectedCategory) {
+    var isAllTransactionsExpanded by remember(currentMonth, selectedCategory, selectedDay) {
         mutableStateOf(false)
     }
     val timeFormatter = remember { java.time.format.DateTimeFormatter.ofPattern("HH:mm") }
     val listDateTimeFormatter = remember { java.time.format.DateTimeFormatter.ofPattern("M/d HH:mm") }
-    val selectedDayTransactions = selectedDay?.let { day ->
-        val selectedDate = currentMonth.atDay(day)
+    val selectedDate = selectedDay?.let { currentMonth.atDay(it) }
+    val selectedDayTransactions = selectedDate?.let { date ->
         transactions
             .filter { tx ->
-                transactionLocalDate(tx) == selectedDate
+                transactionLocalDate(tx) == date &&
+                    (selectedCategory == null || tx.category == selectedCategory)
             }
             .sortedByDescending { tx -> transactionLocalDateTime(tx) ?: LocalDateTime.MIN }
     }.orEmpty()
-    val categoryFilteredTransactions = if (selectedCategory != null) {
-        transactions.filter { it.category == selectedCategory }
-    } else {
-        transactions
-    }.sortedByDescending { tx -> transactionLocalDateTime(tx) ?: LocalDateTime.MIN }
+    val categoryFilteredTransactions = transactions
+        .filter { tx ->
+            (selectedCategory == null || tx.category == selectedCategory) &&
+                (selectedDate == null || transactionLocalDate(tx) == selectedDate)
+        }
+        .sortedByDescending { tx -> transactionLocalDateTime(tx) ?: LocalDateTime.MIN }
     val visibleTransactions = if (isAllTransactionsExpanded) {
         categoryFilteredTransactions
     } else {
@@ -1046,13 +1048,28 @@ private fun LedgerTab(
             currentMonth = currentMonth,
             statsLoading = statsLoading,
             selectedDay = selectedDay,
-            onDaySelected = { day -> selectedDay = day }
+            onDaySelected = { day -> selectedDay = if (selectedDay == day) null else day }
         )
     }
 
     selectedDay?.let { day ->
         Spacer(Modifier.height(12.dp))
         Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "선택한 날짜: ${currentMonth.atDay(day)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Gray600
+                )
+                TextButton(onClick = { selectedDay = null }) {
+                    Text("전체 보기", color = Blue500, fontWeight = FontWeight.SemiBold)
+                }
+            }
             Text(
                 "${currentMonth.monthValue}월 ${day}일 지출 내역",
                 style = MaterialTheme.typography.bodySmall,
@@ -1229,7 +1246,12 @@ private fun LedgerTab(
     if (categoryFilteredTransactions.isNotEmpty()) {
         Spacer(Modifier.height(12.dp))
         Text(
-            if (selectedCategory != null) "${selectedCategory} 내역" else "전체 내역",
+            when {
+                selectedDate != null && selectedCategory != null -> "${selectedDate} ${selectedCategory} 내역"
+                selectedDate != null -> "${selectedDate} 내역"
+                selectedCategory != null -> "${selectedCategory} 내역"
+                else -> "전체 내역"
+            },
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color = Gray600,

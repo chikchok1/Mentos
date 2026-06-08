@@ -133,7 +133,9 @@ class TransactionService(
         }
 
         tx.category = newCategory
-        return transactionRepository.save(tx).toResponse()
+        val saved = transactionRepository.save(tx)
+        userStatsService.recalculate(userId)
+        return saved.toResponse()
     }
 
     // ── 카테고리 수정 (clientTransactionId 기준) — 앱 연동용 ──────────────────
@@ -148,7 +150,9 @@ class TransactionService(
             .orElseThrow { NoSuchElementException("거래 내역을 찾을 수 없습니다. clientId=$clientTransactionId") }
 
         tx.category = newCategory
-        return transactionRepository.save(tx).toResponse()
+        val saved = transactionRepository.save(tx)
+        userStatsService.recalculate(userId)
+        return saved.toResponse()
     }
 
     // ── 내부 헬퍼 ────────────────────────────────────────────────────────────

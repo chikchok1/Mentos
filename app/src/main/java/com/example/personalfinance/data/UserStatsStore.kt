@@ -143,13 +143,14 @@ object UserStatsCalculator {
     fun calculateEarnedXP(
         amount: Long,
         thisMonthSpending: Long = 0L,
-        monthlyBudget: Long = 1_500_000L
+        monthlyBudget: Long = 1_500_000L,
+        category: String = ExpenseCategoryClassifier.CATEGORY_OTHER
     ): Int {
         val baseXP = BASE_EXPENSE_XP
         val amountXP = ((amount.coerceAtLeast(0L) / 10_000L) * 10L)
             .coerceAtMost(100L)
             .toInt()
-        val rawXP = baseXP + amountXP
+        val rawXP = ((baseXP + amountXP) * categoryXpWeight(category)).toInt().coerceAtLeast(1)
 
         val budgetRatio = if (monthlyBudget > 0) {
             thisMonthSpending.toFloat() / monthlyBudget.toFloat()
@@ -159,6 +160,47 @@ object UserStatsCalculator {
             budgetRatio > 1.0f -> MINIMUM_XP
             budgetRatio > 0.8f -> (rawXP * 0.5f).toInt().coerceAtLeast(MINIMUM_XP)
             else               -> rawXP
+        }
+    }
+
+    private fun categoryXpWeight(category: String): Float {
+        val normalized = category
+            .trim()
+            .lowercase()
+            .replace(Regex("""[\s_\-/·]"""), "")
+
+        return when {
+            category == ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE -> 1.0f
+            category == ExpenseCategoryClassifier.CATEGORY_LIVING_MART -> 1.0f
+            category == ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE -> 0.8f
+            category == ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE -> 0.9f
+            category == ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION -> 1.0f
+            category == ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL -> 1.2f
+            normalized.contains("study") ||
+                normalized.contains("education") ||
+                normalized.contains("edu") ||
+                normalized.contains("교육") ||
+                normalized.contains("학습") -> 1.2f
+            normalized.contains("health") ||
+                normalized.contains("medical") ||
+                normalized.contains("병원") ||
+                normalized.contains("의료") ||
+                normalized.contains("건강") -> 1.2f
+            normalized.contains("shopping") ||
+                normalized.contains("shop") ||
+                normalized.contains("online") ||
+                normalized.contains("쇼핑") ||
+                normalized.contains("온라인") -> 0.8f
+            normalized.contains("entertainment") ||
+                normalized.contains("culture") ||
+                normalized.contains("leisure") ||
+                normalized.contains("문화") ||
+                normalized.contains("여가") -> 0.9f
+            normalized.contains("cafe") ||
+                normalized.contains("coffee") ||
+                normalized.contains("카페") ||
+                normalized.contains("커피") -> 0.9f
+            else -> 1.0f
         }
     }
 
@@ -313,7 +355,10 @@ class UserStatsStore private constructor(context: Context) {
             }.sortedByDescending { it.occurredAt }
 
             val totalXP = restored.sumOf { tx ->
-                UserStatsCalculator.calculateEarnedXP(tx.amount).toLong()
+                UserStatsCalculator.calculateEarnedXP(
+                    amount = tx.amount,
+                    category = tx.category
+                ).toLong()
             }.toInt()
 
             val now = YearMonth.now()
@@ -543,6 +588,7 @@ class UserStatsStore private constructor(context: Context) {
 
         val newTotalXP = current.currentXP + UserStatsCalculator.calculateEarnedXP(
             amount = amount,
+            category = normalizedCategory,
             thisMonthSpending = newSpending,
             monthlyBudget = current.monthlyBudget
         )
