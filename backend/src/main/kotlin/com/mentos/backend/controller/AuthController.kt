@@ -8,6 +8,7 @@ import com.mentos.backend.repository.UserRepository
 import com.mentos.backend.security.JwtProvider
 import com.mentos.backend.service.OAuthService
 import com.mentos.backend.service.OAuthUserInfo
+import com.mentos.backend.service.UserProfileService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*
 class AuthController(
     private val oAuthService: OAuthService,
     private val userRepository: UserRepository,
+    private val userProfileService: UserProfileService,
     private val jwtProvider: JwtProvider
 ) {
 
@@ -47,8 +49,9 @@ class AuthController(
             ))
 
         // 자체 JWT 발급
-        val accessToken = jwtProvider.generateAccessToken(user.id)
-        val refreshToken = jwtProvider.generateRefreshToken(user.id)
+        val profiledUser = userProfileService.ensureFriendCode(user)
+        val accessToken = jwtProvider.generateAccessToken(profiledUser.id)
+        val refreshToken = jwtProvider.generateRefreshToken(profiledUser.id)
 
         // 클라이언트(안드로이드)에 JWT 응답
         return ResponseEntity.ok(AuthResponse(accessToken, refreshToken))

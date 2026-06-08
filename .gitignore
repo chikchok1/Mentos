@@ -57,3 +57,7 @@ captures/
 
 # Windows hidden files
 Thumbs.db
+
+# Sensitive config files
+backend/src/main/resources/application-prod.yml
+backend/src/main/resources/application.yml

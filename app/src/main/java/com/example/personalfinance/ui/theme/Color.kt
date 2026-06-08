@@ -1,8 +1,10 @@
 package com.example.personalfinance.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import com.example.personalfinance.data.GachaGrade
 
 // ── Brand Colors ──────────────────────────────────────────────────────────────
+val Blue300  = Color(0xFFAEC6FF)
 val Blue400  = Color(0xFF7FA4FF)
 val Blue500  = Color(0xFF6B94FF)
 val Purple400 = Color(0xFFB17CFF)
@@ -43,3 +45,21 @@ val GoogleBlue = Color(0xFF4285F4)
 val GoogleRed = Color(0xFFEA4335)
 val GoogleGreen = Color(0xFF34A853)
 val GoogleYellow = Color(0xFFFBBC05)
+
+// ── Capsule Animation Tokens ────────────────────────────────────────────────
+
+// Base colors for capsule per rarity
+val capsuleBaseColors = mapOf(
+    GachaGrade.COMMON to Color(0xFFE0E0E0),
+    GachaGrade.RARE to Color(0xFF64B5F6),
+    GachaGrade.UNIQUE to Color(0xFFCE93D8),
+    GachaGrade.LEGENDARY to Color(0xFFFFD54F)
+)
+
+// Particle tint colors per rarity
+val particleColors = mapOf(
+    GachaGrade.COMMON to listOf(Color(0xFF9E9E9E), Color(0xFFB0BEC5)),
+    GachaGrade.RARE to listOf(Color(0xFF1565C0), Color(0xFF42A5F5)),
+    GachaGrade.UNIQUE to listOf(Color(0xFF6A1B9A), Color(0xFFAB47BC)),
+    GachaGrade.LEGENDARY to listOf(Color(0xFFE65100), Color(0xFFFFA726))
+)

@@ -35,6 +35,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.example.personalfinance.data.*
 import com.example.personalfinance.network.ApiClient
+import com.example.personalfinance.ui.components.CharacterLayerPreview
+import com.example.personalfinance.ui.components.CharacterLayerState
+import com.example.personalfinance.ui.main.animation.CapsuleOpeningAnimation
 import com.example.personalfinance.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,6 +45,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
+import android.util.Log
 
 // ── 캡슐머신 카드 데이터 ──────────────────────────────────────────────────────────
 
@@ -60,16 +64,18 @@ private data class CapsuleMachineData(
 fun GachaScreen(navController: NavController) {
     val context        = LocalContext.current
     val gachaStore     = remember { GachaStore(context) }
+    val shopStore      = remember { ShopStore.getInstance(context) }
     val coroutineScope = rememberCoroutineScope()
     val tokenManager   = remember { TokenManager(context) }
     val gachaApi       = remember { ApiClient.getGachaApi(context, tokenManager) }
 
     // ── 상태 ──────────────────────────────────────────────────────────────────
-    var attendanceUsed   by remember { mutableStateOf(false) }
-    var countdownText    by remember { mutableStateOf(gachaStore.timeUntilMidnight()) }
-    var coins            by remember { mutableStateOf(0) }
-    var gachaResult      by remember { mutableStateOf<GachaResult?>(null) }
-    var showResultDialog by remember { mutableStateOf(false) }
+    var attendanceUsed    by remember { mutableStateOf(false) }
+    var countdownText     by remember { mutableStateOf(gachaStore.timeUntilMidnight()) }
+    var coins             by remember { mutableStateOf(0) }
+    var gachaResult       by remember { mutableStateOf<GachaResult?>(null) }
+    var showResultDialog  by remember { mutableStateOf(false) }
+    var showProbDialog    by remember { mutableStateOf(false) }
 
     // 서버 상태 조회 및 타이머 루프
     LaunchedEffect(Unit) {
@@ -190,7 +196,26 @@ fun GachaScreen(navController: NavController) {
                 )
             }
 
-            GachaProbabilityRow()
+            // ── 확률 보기 버튼 ────────────────────────────────────────────
+            OutlinedButton(
+                onClick  = { showProbDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape    = RoundedCornerShape(14.dp),
+                border   = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            ) {
+                Icon(
+                    imageVector        = Icons.Rounded.BarChart,
+                    contentDescription = null,
+                    tint               = Gray600,
+                    modifier           = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text  = "확률 보기",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Gray600,
+                )
+            }
             Spacer(Modifier.height(20.dp))
 
             machines.forEach { machine ->
@@ -225,17 +250,31 @@ fun GachaScreen(navController: NavController) {
                                             val isDup      = body?.get("isDuplicate") as? Boolean ?: false
                                             val coinRew    = (body?.get("coinReward") as? Number)?.toInt() ?: 0
                                             val totalCoins = (body?.get("totalCoins") as? Number)?.toInt() ?: 0
-                                            if (itemId != null) {
-                                                val item = GachaItemPool.findById(itemId)
-                                                if (item != null) {
-                                                    gachaResult = if (isDup)
-                                                        GachaResult.DuplicateCoin(item, coinRew)
-                                                    else
-                                                        GachaResult.NewItem(item)
-                                                    coins          = totalCoins
-                                                    attendanceUsed = true
-                                                    showResultDialog = true
+                                            if (!itemId.isNullOrBlank()) {
+                                                val grade = gradeFromItemId(itemId)
+                                                val item  = GachaItem(
+                                                    id    = itemId,
+                                                    name  = itemId.substringAfterLast("/").removeSuffix(".png"),
+                                                    grade = grade,
+                                                )
+                                                // 신규 아이템이면 로컬 ShopStore에 저장 (앱 재설치 시 서버에서 복원)
+                                                if (!isDup) {
+                                                    val parts = itemId.split("/")
+                                                    if (parts.size >= 3) {
+                                                        val folder   = "${parts[0]}/${parts[1]}"
+                                                        val filename = parts.drop(2).joinToString("/")
+                                                        shopStore.addOwned(folder, filename)
+                                                    } else {
+                                                        Log.w("GachaScreen", "예상치 못한 itemId 형식: $itemId")
+                                                    }
                                                 }
+                                                gachaResult = if (isDup)
+                                                    GachaResult.DuplicateCoin(item, coinRew)
+                                                else
+                                                    GachaResult.NewItem(item)
+                                                coins          = totalCoins
+                                                attendanceUsed = true
+                                                showResultDialog = true
                                             }
                                         } else {
                                             android.widget.Toast.makeText(context, "오류가 발생했습니다.", android.widget.Toast.LENGTH_SHORT).show()
@@ -246,7 +285,51 @@ fun GachaScreen(navController: NavController) {
                                 }
                             }
                             "ad"   -> adWatched = true
-                            "coin" -> { /* TODO: 코인 뽑기 API 연동 */ }
+                            "coin" -> {
+                                coroutineScope.launch {
+                                    try {
+                                        val response = gachaApi.performCoinGacha()
+                                        if (response.isSuccessful) {
+                                            val body       = response.body()
+                                            val itemId     = body?.get("itemId") as? String
+                                            val isDup      = body?.get("isDuplicate") as? Boolean ?: false
+                                            val coinRew    = (body?.get("coinReward") as? Number)?.toInt() ?: 0
+                                            val totalCoins = (body?.get("totalCoins") as? Number)?.toInt() ?: 0
+                                            if (!itemId.isNullOrBlank()) {
+                                                val grade = gradeFromItemId(itemId)
+                                                val item  = GachaItem(
+                                                    id    = itemId,
+                                                    name  = itemId.substringAfterLast("/").removeSuffix(".png"),
+                                                    grade = grade,
+                                                )
+                                                // 신규 아이템이면 로컬 ShopStore에 저장 (앱 재설치 시 서버에서 복원)
+                                                if (!isDup) {
+                                                    val parts = itemId.split("/")
+                                                    if (parts.size >= 3) {
+                                                        val folder   = "${parts[0]}/${parts[1]}"
+                                                        val filename = parts.drop(2).joinToString("/")
+                                                        shopStore.addOwned(folder, filename)
+                                                    } else {
+                                                        Log.w("GachaScreen", "예상치 못한 itemId 형식: $itemId")
+                                                    }
+                                                }
+                                                gachaResult = if (isDup)
+                                                    GachaResult.DuplicateCoin(item, coinRew)
+                                                else
+                                                    GachaResult.NewItem(item)
+                                                coins           = totalCoins
+                                                showResultDialog = true
+                                            }
+                                        } else {
+                                            val errBody = response.errorBody()?.string() ?: ""
+                                            val msg = if (errBody.contains("부족")) "코인이 부족합니다 (필요: 10개)" else "오류가 발생했습니다."
+                                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "네트워크 오류", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
                         }
                     },
                 )
@@ -268,42 +351,176 @@ fun GachaScreen(navController: NavController) {
 
     // ── 가챠 결과 연출 ────────────────────────────────────────────────────────
     if (showResultDialog && gachaResult != null) {
-        CinematicGachaReveal(
+        CapsuleOpeningAnimation(
             result    = gachaResult!!,
-            onDismiss = { showResultDialog = false }
+            onDismiss = { showResultDialog = false },
+            durationMs = 2500
         )
+    }
+
+    // ── 확률 보기 다이얼로그 ──────────────────────────────────────────────────
+    if (showProbDialog) {
+        GachaProbabilityDialog(onDismiss = { showProbDialog = false })
     }
 }
 
-// ── 확률 안내 행 ──────────────────────────────────────────────────────────────
+// ── 확률 다이얼로그 ────────────────────────────────────────────────────────────
+
+private data class GradeInfo(val name: String, val pct: String, val color: Color)
+
+private val attendanceGrades = listOf(
+    GradeInfo("Common",    "60%", Color(0xFF9E9E9E)),
+    GradeInfo("Rare",      "25%", Color(0xFF1976D2)),
+    GradeInfo("Unique",    "10%", Color(0xFF7B1FA2)),
+    GradeInfo("Legendary",  "5%", Color(0xFFE65100)),
+)
+
+private val coinGrades = listOf(
+    GradeInfo("Common",    "55%", Color(0xFF9E9E9E)),
+    GradeInfo("Rare",      "30%", Color(0xFF1976D2)),
+    GradeInfo("Unique",    "10%", Color(0xFF7B1FA2)),
+    GradeInfo("Legendary",  "5%", Color(0xFFE65100)),
+)
 
 @Composable
-private fun GachaProbabilityRow() {
-    val grades = listOf(
-        Triple("Common",    "70%", Color(0xFF9E9E9E)),
-        Triple("Rare",      "15%", Color(0xFF1976D2)),
-        Triple("Unique",     "4%", Color(0xFF7B1FA2)),
-        Triple("Legendary",  "1%", Color(0xFFE65100)),
-    )
-    Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFFF8F9FA))
-            .padding(vertical = 12.dp, horizontal = 8.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+private fun GachaProbabilityDialog(onDismiss: () -> Unit) {
+    var selectedTab by remember { mutableStateOf(0) }  // 0 = 출석, 1 = 코인
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties       = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        grades.forEach { (name, pct, color) ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
+        Card(
+            modifier  = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            shape     = RoundedCornerShape(24.dp),
+            colors    = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+
+                // 제목
+                Row(
+                    modifier          = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text       = "확률 안내",
+                        style      = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color      = Gray900,
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Rounded.Close, contentDescription = "닫기", tint = Gray400)
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // 탭 (출석 가챠 / 코인 가챠)
+                Row(
                     modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(color)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF5F5F5))
+                        .padding(4.dp),
+                ) {
+                    listOf("🎁 출석 가챠", "🪙 코인 가챠").forEachIndexed { index, label ->
+                        val selected = selectedTab == index
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (selected) Color.White else Color.Transparent
+                                )
+                                .clickable { selectedTab = index }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text       = label,
+                                style      = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color      = if (selected) Gray900 else Gray500,
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // 확률 테이블
+                val grades = if (selectedTab == 0) attendanceGrades else coinGrades
+
+                grades.forEach { grade ->
+                    Row(
+                        modifier          = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // 색상 도트
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(grade.color)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        // 등급명
+                        Text(
+                            text       = grade.name,
+                            style      = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = grade.color,
+                            modifier   = Modifier.weight(1f),
+                        )
+                        // 확률 바
+                        val pctValue = grade.pct.replace("%", "").toFloatOrNull() ?: 0f
+                        Box(
+                            modifier = Modifier
+                                .width(120.dp)
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color(0xFFF0F0F0))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(pctValue / 100f)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(grade.color)
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        // 확률 텍스트
+                        Text(
+                            text      = grade.pct,
+                            style     = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color     = Gray700,
+                        )
+                    }
+                    if (grade != grades.last()) {
+                        HorizontalDivider(color = Color(0xFFF5F5F5))
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // 부가 설명
+                val note = if (selectedTab == 0)
+                    "출석 가챠는 매일 무료로 한 번 참여할 수 있어요."
+                else
+                    "코인 가챠는 코인 10개를 소모해 참여해요."
+                Text(
+                    text  = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Gray400,
                 )
-                Spacer(Modifier.height(4.dp))
-                Text(text = name, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.SemiBold)
-                Text(text = pct,  style = MaterialTheme.typography.labelSmall, color = Gray500)
             }
         }
     }
@@ -650,71 +867,75 @@ private fun CinematicGachaReveal(
                     }
 
                     // ──────────────────────────────────────────────────
-                    // Lid (상반구) – lidProgress 0→1 로 위로 이동
+                    // Lid (상반구) – lidProgress 0→1 로 위로 이동 + 페이드 아웃
                     // ──────────────────────────────────────────────────
                     val lidCy = cy - lidProgress * (size.height + cr)
+                    // 초반엔 불투명 유지, 후반부에 빠르게 사라지는 EaseIn 곡선
+                    val lidAlpha = (1f - (lidProgress * 1.4f).coerceIn(0f, 1f).let { it * it }).coerceIn(0f, 1f)
 
-                    clipRect(left = cx - cr, top = lidCy - cr, right = cx + cr, bottom = lidCy) {
-                        // 1) 베이스 색상
-                        drawCircle(color = lidColor, radius = cr, center = Offset(cx, lidCy))
+                    if (lidAlpha > 0f) {
+                        clipRect(left = cx - cr, top = lidCy - cr, right = cx + cr, bottom = lidCy) {
+                            // 1) 베이스 색상
+                            drawCircle(color = lidColor.copy(alpha = lidAlpha), radius = cr, center = Offset(cx, lidCy))
 
-                        // 2) 측면 어둠
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.38f),
+                            // 2) 측면 어둠
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.38f * lidAlpha),
+                                    ),
+                                    center = Offset(cx, lidCy),
+                                    radius = cr,
                                 ),
-                                center = Offset(cx, lidCy),
                                 radius = cr,
-                            ),
-                            radius = cr,
-                            center = Offset(cx, lidCy),
-                        )
+                                center = Offset(cx, lidCy),
+                            )
 
-                        // 3) 주 하이라이트 – 왼쪽 위 (광원이 좌상단)
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.75f),
-                                    Color.White.copy(alpha = 0.25f),
-                                    Color.Transparent,
+                            // 3) 주 하이라이트 – 왼쪽 위 (광원이 좌상단)
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.75f * lidAlpha),
+                                        Color.White.copy(alpha = 0.25f * lidAlpha),
+                                        Color.Transparent,
+                                    ),
+                                    center = Offset(cx - cr * 0.28f, lidCy - cr * 0.42f),
+                                    radius = cr * 0.55f,
                                 ),
-                                center = Offset(cx - cr * 0.28f, lidCy - cr * 0.42f),
-                                radius = cr * 0.55f,
-                            ),
-                            radius = cr,
-                            center = Offset(cx, lidCy),
-                        )
+                                radius = cr,
+                                center = Offset(cx, lidCy),
+                            )
 
-                        // 4) 유리 굴절 – 하단 내부 밝은 반사
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.18f),
-                                    Color.Transparent,
+                            // 4) 유리 굴절 – 하단 내부 밝은 반사
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.18f * lidAlpha),
+                                        Color.Transparent,
+                                    ),
+                                    center = Offset(cx + cr * 0.15f, lidCy - cr * 0.05f),
+                                    radius = cr * 0.45f,
                                 ),
-                                center = Offset(cx + cr * 0.15f, lidCy - cr * 0.05f),
-                                radius = cr * 0.45f,
-                            ),
-                            radius = cr,
-                            center = Offset(cx, lidCy),
-                        )
+                                radius = cr,
+                                center = Offset(cx, lidCy),
+                            )
+                        }
                     }
 
-                    // 작은 스페큘러 하이라이트 (광원 반짝이)
+                    // 작은 스페큘러 하이라이트 (광원 반짝이) – 뚜껑과 함께 페이드 아웃
                     val shineCy = lidCy - cr * 0.44f
-                    if (shineCy > cy - cr - 20f) {
+                    if (shineCy > cy - cr - 20f && lidAlpha > 0f) {
                         // 큰 글로우
                         drawCircle(
-                            color  = Color.White.copy(alpha = 0.35f),
+                            color  = Color.White.copy(alpha = 0.35f * lidAlpha),
                             radius = cr * 0.10f,
                             center = Offset(cx - cr * 0.28f, shineCy),
                         )
                         // 작은 하이라이트 점
                         drawCircle(
-                            color  = Color.White.copy(alpha = 0.90f),
+                            color  = Color.White.copy(alpha = 0.90f * lidAlpha),
                             radius = cr * 0.045f,
                             center = Offset(cx - cr * 0.28f, shineCy),
                         )
@@ -766,10 +987,10 @@ private fun CinematicGachaReveal(
                             },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Image(
-                            painter            = painterResource(id = item.drawableResId),
-                            contentDescription = item.name,
-                            modifier           = Modifier.size(68.dp),
+                        val layerState = remember(item.id) { itemIdToLayerState(item.id) }
+                        CharacterLayerPreview(
+                            layerState = layerState,
+                            size       = 68.dp,
                         )
                     }
                 }
@@ -1141,4 +1362,24 @@ private fun DrawScope.drawCapsuleMachine(color: Color, alpha: Float) {
         radius = r(5f),
         center = Offset(x(95f), y(70f)),
     )
+}
+
+// ── itemId → CharacterLayerState 변환 ─────────────────────────────────────────
+
+private fun itemIdToLayerState(itemId: String): CharacterLayerState {
+    val parts = itemId.split("/")
+    if (parts.size < 3) return CharacterLayerState()
+    val category = parts[1]
+    val filename = parts.drop(2).joinToString("/")
+    return when (category) {
+        "faces"       -> CharacterLayerState(face      = filename)
+        "hairs"       -> CharacterLayerState(hair      = filename)
+        "hats"        -> CharacterLayerState(hat       = filename)
+        "accessories" -> CharacterLayerState(accessory = filename)
+        "clothes"     -> if (filename.startsWith("top"))
+            CharacterLayerState(topClothes = filename)
+        else
+            CharacterLayerState(botClothes = filename)
+        else          -> CharacterLayerState()
+    }
 }

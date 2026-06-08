@@ -16,11 +16,13 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import androidx.core.content.ContextCompat
+import com.example.personalfinance.network.SaveNotificationParseLogRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 
 class CardNotificationListenerService : NotificationListenerService() {
 
@@ -51,6 +53,14 @@ class CardNotificationListenerService : NotificationListenerService() {
                 reason = "허용되지 않은 패키지",
                 handled = true
             )
+            enqueueNotificationParseLog(
+                diagnosticId = diagnosticId,
+                packageName = sbn.packageName,
+                title = title,
+                rawText = null,
+                status = NotificationParseLogStatus.UNSUPPORTED_FORMAT,
+                failureReason = "지원하지 않는 패키지"
+            )
             Log.d(TAG, "Ignoring unsupported notification package=${sbn.packageName}")
             return
         }
@@ -65,6 +75,14 @@ class CardNotificationListenerService : NotificationListenerService() {
                 handled = true,
                 allowRawTextPreview = true
             )
+            enqueueNotificationParseLog(
+                diagnosticId = diagnosticId,
+                packageName = sbn.packageName,
+                title = title,
+                rawText = null,
+                status = NotificationParseLogStatus.PARSE_FAILED,
+                failureReason = "알림 내용 없음"
+            )
             return
         }
 
@@ -78,6 +96,14 @@ class CardNotificationListenerService : NotificationListenerService() {
             handled = false,
             rawText = content.text,
             allowRawTextPreview = true
+        )
+        enqueueNotificationParseLog(
+            diagnosticId = diagnosticId,
+            packageName = sbn.packageName,
+            title = content.title,
+            rawText = content.text,
+            status = NotificationParseLogStatus.RECEIVED,
+            failureReason = "알림 수신"
         )
 
         if (!PaymentNotificationCandidateFilter.isCandidate(content.title, content.text)) {
@@ -94,6 +120,18 @@ class CardNotificationListenerService : NotificationListenerService() {
                 handled = true,
                 rawText = content.text,
                 allowRawTextPreview = true
+            )
+            enqueueNotificationParseLog(
+                diagnosticId = diagnosticId,
+                packageName = sbn.packageName,
+                title = content.title,
+                rawText = content.text,
+                status = NotificationParseLogStatus.IGNORED_NOT_PAYMENT,
+                failureReason = if (content.text.isBlank()) {
+                    "rawText 추출 부족"
+                } else {
+                    "결제 알림 아님"
+                }
             )
             Log.i(TAG, "Ignoring non-payment notification package=${sbn.packageName}")
             return
@@ -125,8 +163,8 @@ class CardNotificationListenerService : NotificationListenerService() {
         }
         val serviceScope = this.serviceScope
         serviceScope.launch {
-            // 백엔드 AI 파싱 API 호출 (로컬 사전 제거)
-            var category = ExpenseCategoryClassifier.CATEGORY_OTHER
+            // 로컬 기본 분류 후 백엔드 AI 결과로 보정
+            var category = ExpenseCategoryClassifier.classifyMerchant(result.merchantName)
 
             if (result.merchantName.isNotBlank()) {
                 try {
@@ -236,6 +274,35 @@ class CardNotificationListenerService : NotificationListenerService() {
                 allowRawTextPreview = true
             )
 
+            enqueueNotificationParseLog(
+                diagnosticId = diagnosticId,
+                packageName = sbn.packageName,
+                title = content.title,
+                rawText = content.text,
+                status = when (handlingStatus) {
+                    CardNotificationHandlingStatus.APPROVED_RECORDED -> NotificationParseLogStatus.PARSE_SUCCESS
+                    CardNotificationHandlingStatus.DUPLICATE_IGNORED -> NotificationParseLogStatus.DUPLICATED
+                    CardNotificationHandlingStatus.PARSE_FAILED -> NotificationParseLogStatus.PARSE_FAILED
+                    else -> NotificationParseLogStatus.UNSUPPORTED_FORMAT
+                },
+                failureReason = diagnosticReason,
+                amount = result.amount,
+                merchantName = result.merchantName.takeIf { it.isNotBlank() },
+                occurredAt = result.transactionDateTime?.toString(),
+                clientTransactionId = if (handlingStatus == CardNotificationHandlingStatus.APPROVED_RECORDED ||
+                    handlingStatus == CardNotificationHandlingStatus.DUPLICATE_IGNORED
+                ) {
+                    ProcessedNotificationKey(
+                        packageName = sbn.packageName,
+                        postTime = sbn.postTime,
+                        amount = result.amount ?: 0L,
+                        merchantName = result.merchantName
+                    ).toTransactionId()
+                } else {
+                    null
+                }
+            )
+
             CardNotificationDebugStore.update(
                 sourcePackage = sbn.packageName,
                 title = content.title,
@@ -318,6 +385,63 @@ class CardNotificationListenerService : NotificationListenerService() {
             }
         }
         return null
+    }
+
+    private fun enqueueNotificationParseLog(
+        diagnosticId: String,
+        packageName: String,
+        title: String?,
+        rawText: String?,
+        status: String,
+        failureReason: String?,
+        amount: Long? = null,
+        merchantName: String? = null,
+        occurredAt: String? = null,
+        clientTransactionId: String? = null
+    ) {
+        serviceScope.launch {
+            try {
+                val tokenManager = TokenManager(this@CardNotificationListenerService)
+                val api = ApiClient.getNotificationParseLogApi(
+                    this@CardNotificationListenerService,
+                    tokenManager
+                )
+                val response = api.save(
+                    SaveNotificationParseLogRequest(
+                        diagnosticId = diagnosticId,
+                        packageName = packageName,
+                        title = title,
+                        rawText = rawText,
+                        status = status,
+                        failureReason = failureReason,
+                        parsedAmount = amount,
+                        parsedMerchant = merchantName,
+                        parsedOccurredAt = occurredAt,
+                        clientTransactionId = clientTransactionId,
+                        receivedAt = LocalDateTime.now().toString()
+                    )
+                )
+                if (!response.isSuccessful) {
+                    val errorBody = response.errorBody()?.string().orEmpty()
+                    Log.e(
+                        TAG,
+                        "Notification parse log sync failed HTTP ${response.code()}: " +
+                            "status=$status, error=$errorBody"
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Notification parse log sync failed: ${e.message}", e)
+            }
+        }
+    }
+
+    private object NotificationParseLogStatus {
+        const val RECEIVED = "RECEIVED"
+        const val PARSE_SUCCESS = "PARSE_SUCCESS"
+        const val PARSE_FAILED = "PARSE_FAILED"
+        const val DUPLICATED = "DUPLICATED"
+        const val IGNORED_NOT_PAYMENT = "IGNORED_NOT_PAYMENT"
+        const val UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
     }
 
     private companion object {

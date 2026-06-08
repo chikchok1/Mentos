@@ -7,10 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +45,7 @@ fun MenuScreen(
     val context    = LocalContext.current
     val store      = remember { UserStatsStore.getInstance(context) }
     val userStats  by store.statsFlow.collectAsState()
+    val nickname   by store.nicknameFlow.collectAsState()
     val level      = userStats.currentLevel
     val xp         = userStats.currentXP
     val levelTitle = UserStatsCalculator.levelTitle(level)
@@ -78,7 +76,10 @@ fun MenuScreen(
 
         // ── Profile ───────────────────────────────────────────────────────────
         Row(
-            modifier          = Modifier.fillMaxWidth().padding(24.dp),
+            modifier          = Modifier
+                .fillMaxWidth()
+                .clickable { navController.navigate(com.example.personalfinance.navigation.Screen.Profile.route) }
+                .padding(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -88,8 +89,12 @@ fun MenuScreen(
                 contentAlignment = Alignment.Center
             ) { Text("👤", fontSize = 28.sp) }
             Spacer(Modifier.width(16.dp))
-            Column {
-                Text("사용자님", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold) // 실제 이름은 백엔드 연동 시 추가
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text       = if (nickname.isBlank()) "사용자님" else "${nickname}님",
+                    style      = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Text(
                     "Lv.$level $levelTitle · $jobTitle",
                     style    = MaterialTheme.typography.bodyMedium,
@@ -97,6 +102,7 @@ fun MenuScreen(
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
+            Icon(Icons.Rounded.ChevronRight, null, tint = Gray400)
         }
         HorizontalDivider(color = Gray100)
 
@@ -111,6 +117,8 @@ fun MenuScreen(
                         .background(Gray50)
                         .clickable {
                             when (item.id) {
+                                "friends"   -> navController.navigate(com.example.personalfinance.navigation.Screen.Friends.route)
+                                "shop"      -> navController.navigate(com.example.personalfinance.navigation.Screen.Shop.route)
                                 "gacha"     -> navController.navigate(com.example.personalfinance.navigation.Screen.Gacha.route)
                                 "inventory" -> navController.navigate(com.example.personalfinance.navigation.Screen.Inventory.route)
                             }
@@ -145,8 +153,10 @@ fun MenuScreen(
             )
             listOf(
                 "결제 알림 테스트" to onNotificationDebugClick,
+                "🎰 가챠 테스트" to { navController.navigate(com.example.personalfinance.navigation.Screen.GachaDebug.route) },
+                "🎨 캐릭터 레이어 테스트" to { navController.navigate(com.example.personalfinance.navigation.Screen.CharacterLayerTest.route) },
                 "알림 설정" to {},
-                "프로필 수정" to {},
+                "내 프로필" to { navController.navigate(com.example.personalfinance.navigation.Screen.Profile.route) },
                 "앱 정보" to {}
             ).forEach { (label, onClick) ->
                 Row(
@@ -164,7 +174,7 @@ fun MenuScreen(
                     Icon(Icons.Rounded.ChevronRight, null, tint = Gray400)
                 }
             }
-            
+
             // 로그아웃 버튼
             Row(
                 modifier = Modifier

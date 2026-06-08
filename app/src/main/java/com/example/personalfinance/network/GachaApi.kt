@@ -13,4 +13,10 @@ interface GachaApi {
 
     @GET("api/gacha/user-state")
     suspend fun getUserGachaState(): Response<Map<String, Any>>
+
+    @POST("api/gacha/coin")
+    suspend fun performCoinGacha(): Response<Map<String, Any>>
+
+    @POST("api/gacha/test/add-coins")
+    suspend fun addCoinsForTest(@retrofit2.http.Query("amount") amount: Int = 100): Response<Map<String, Any>>
 }

@@ -20,8 +20,9 @@ data class Transaction(
     val category: String,
     val status: String = TransactionStatus.APPROVED_RECORDED,
     val source: String = TransactionSource.SAMPLE,
-    val occurredAt: String = date,
-    val id: String = "$source|$occurredAt|$amount|$store"
+    val occurredAt: String = java.time.LocalDateTime.now().toString(),
+    val id: String = "$source|$occurredAt|$amount|$store",
+    val rawNotification: String? = null
 )
 
 object TransactionStatus {
@@ -29,8 +30,9 @@ object TransactionStatus {
 }
 
 object TransactionSource {
-    const val NOTIFICATION = "notification"
-    const val SAMPLE = "sample"
+    const val NOTIFICATION = "NOTIFICATION"
+    const val MANUAL       = "MANUAL"
+    const val SAMPLE       = "SAMPLE"
 }
 
 data class MonthlyData(
