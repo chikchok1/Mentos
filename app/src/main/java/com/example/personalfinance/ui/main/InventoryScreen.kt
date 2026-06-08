@@ -325,8 +325,12 @@ fun InventoryScreen(navController: NavController) {
                                             InventoryCategory.BOT  -> equipped.copy(botClothes = null)
                                             InventoryCategory.ACC  -> equipped.copy(accessory = null)
                                         }
-                                        appearanceStore.save(newAppearance)
                                         coroutine.launch {
+                                            val saved = appearanceStore.saveWithServer(newAppearance, ownedItems)
+                                            if (!saved) {
+                                                snackbarHostState.showSnackbar("캐릭터 서버 저장에 실패했습니다.")
+                                                return@launch
+                                            }
                                             snackbarHostState.showSnackbar("장착 해제 완료!")
                                         }
                                     }
