@@ -10,6 +10,12 @@ import com.example.personalfinance.data.TransactionStatus
 import com.example.personalfinance.data.UserStatsStore
 import com.example.personalfinance.data.TokenManager
 import com.example.personalfinance.network.ApiClient
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
+import androidx.core.content.ContextCompat
 import com.example.personalfinance.network.SaveNotificationParseLogRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -164,7 +170,14 @@ class CardNotificationListenerService : NotificationListenerService() {
                 try {
                     val tokenManager = TokenManager(this@CardNotificationListenerService)
                     val classificationApi = ApiClient.getClassificationApi(this@CardNotificationListenerService, tokenManager)
-                    val response = classificationApi.categorizeMerchant(result.merchantName)
+                    
+                    val location = getLastKnownLocation(this@CardNotificationListenerService)
+                    val response = classificationApi.categorizeMerchant(
+                        merchantName = result.merchantName,
+                        lat = location?.first,
+                        lng = location?.second,
+                        isOnline = null // 백엔드 사전(Dictionary)이 처리
+                    )
                     
                     if (response.isSuccessful) {
                         val aiCategory = response.body()?.get("category")
@@ -355,6 +368,23 @@ class CardNotificationListenerService : NotificationListenerService() {
         val merchantName: String
     ) {
         fun toTransactionId(): String = "$packageName|$postTime|$amount|$merchantName"
+    }
+
+    private fun getLastKnownLocation(context: Context): Pair<Double, Double>? {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                val location: Location? = locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+                    ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                
+                if (location != null) {
+                    return Pair(location.latitude, location.longitude)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get last known location", e)
+            }
+        }
+        return null
     }
 
     private fun enqueueNotificationParseLog(
