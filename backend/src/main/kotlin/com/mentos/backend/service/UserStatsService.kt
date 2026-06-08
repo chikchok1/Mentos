@@ -93,7 +93,8 @@ class UserStatsService(
             .orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
 
     private fun parseVisibility(value: String, allowPrivate: Boolean): VisibilityScope {
-        val parsed = runCatching { VisibilityScope.valueOf(value.uppercase()) }
+        val normalized = value.trim().uppercase()
+        val parsed = runCatching { VisibilityScope.valueOf(normalized) }
             .getOrElse { throw IllegalArgumentException("지원하지 않는 공개 범위입니다: $value") }
         if (!allowPrivate && parsed == VisibilityScope.PRIVATE) {
             throw IllegalArgumentException("캐릭터 공개 범위는 FRIENDS만 지원합니다.")

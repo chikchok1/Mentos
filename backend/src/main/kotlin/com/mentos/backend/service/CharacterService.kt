@@ -38,6 +38,9 @@ class CharacterService(
             require(user.ownedItems.contains(item.itemId)) {
                 "보유하지 않은 아이템은 장착할 수 없습니다: ${item.itemId}"
             }
+            require(item.slot in allowedSlots && itemMatchesSlot(item.itemId, item.slot)) {
+                "아이템과 장착 slot이 일치하지 않습니다: ${item.slot}, ${item.itemId}"
+            }
         }
 
         equippedItemRepository.deleteByUserId(userId)
@@ -66,5 +69,23 @@ class CharacterService(
     private fun normalizeSlot(slot: String): String =
         slot.trim().uppercase()
 
+    private fun itemMatchesSlot(itemId: String, slot: String): Boolean {
+        val parts = itemId.split("/")
+        if (parts.size != 3) return false
+        val category = parts[1]
+        val filename = parts[2]
+        return when (slot) {
+            "FACE" -> category == "faces"
+            "HAIR" -> category == "hairs"
+            "HAT" -> category == "hats"
+            "ACCESSORY", "ACC" -> category == "accessories"
+            "TOP" -> category == "clothes" && filename.startsWith("top")
+            "BOT" -> category == "clothes" && filename.startsWith("bot")
+            else -> false
+        }
+    }
+
     private val itemOrder = compareBy<EquippedItemDto> { it.layerOrder }.thenBy { it.slot }
+
+    private val allowedSlots = setOf("FACE", "HAIR", "HAT", "ACCESSORY", "ACC", "TOP", "BOT")
 }

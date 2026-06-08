@@ -119,12 +119,14 @@ class FriendsStore private constructor(context: Context) {
     }
 
     suspend fun loadComparison(friendId: Long) {
+        _comparison.value = null
         runApi("친구 비교 조회 실패") {
             val api = ApiClient.getFriendApi(appContext, TokenManager(appContext))
             val response = api.getComparison(friendId)
             if (response.isSuccessful) {
                 _comparison.value = response.body()
             } else {
+                _comparison.value = null
                 fail(response.code(), "친구 비교 조회 실패")
             }
         }

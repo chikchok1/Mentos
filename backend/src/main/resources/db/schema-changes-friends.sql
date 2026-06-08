@@ -33,6 +33,38 @@ CREATE TABLE IF NOT EXISTS friends (
         ON DELETE CASCADE
 );
 
-ALTER TABLE users
-    ADD COLUMN spending_visibility VARCHAR(30) NOT NULL DEFAULT 'PRIVATE',
-    ADD COLUMN character_visibility VARCHAR(30) NOT NULL DEFAULT 'FRIENDS';
+SET @schema_name = DATABASE();
+
+SET @sql = (
+    SELECT IF(
+        EXISTS (
+            SELECT 1
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = @schema_name
+              AND TABLE_NAME = 'users'
+              AND COLUMN_NAME = 'spending_visibility'
+        ),
+        'SELECT ''users.spending_visibility already exists''',
+        'ALTER TABLE users ADD COLUMN spending_visibility VARCHAR(30) NOT NULL DEFAULT ''PRIVATE'''
+    )
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        EXISTS (
+            SELECT 1
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = @schema_name
+              AND TABLE_NAME = 'users'
+              AND COLUMN_NAME = 'character_visibility'
+        ),
+        'SELECT ''users.character_visibility already exists''',
+        'ALTER TABLE users ADD COLUMN character_visibility VARCHAR(30) NOT NULL DEFAULT ''FRIENDS'''
+    )
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
