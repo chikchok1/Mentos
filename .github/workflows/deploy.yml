@@ -21,24 +21,23 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Gradle cache
+      - name: Set up Gradle 8.6
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x backend/gradlew
+        with:
+          gradle-version: 8.6
 
       - name: Build JAR
         run: |
           cd backend
 
           for i in 1 2 3; do
-            if ./gradlew bootJar -x test; then
+            if gradle bootJar -x test --no-daemon; then
               echo "Gradle build succeeded."
               exit 0
             fi
 
             echo "Gradle build failed. Retry $i/3..."
-            sleep 15
+            sleep 30
           done
 
           echo "Gradle build failed after 3 retries."
