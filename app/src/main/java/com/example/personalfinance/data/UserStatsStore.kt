@@ -47,6 +47,12 @@ data class UserStats(
             ?: ExpenseCategoryClassifier.CATEGORY_OTHER
 }
 
+data class JobGuide(
+    val job: String,
+    val category: String,
+    val description: String
+)
+
 data class PrivacySettings(
     val spendingVisibility: String = "PRIVATE",
     val characterVisibility: String = "FRIENDS"
@@ -139,6 +145,39 @@ object UserStatsCalculator {
         "healer"   -> "힐러"
         else       -> "모험가"
     }
+
+    fun jobGuides(): List<JobGuide> = listOf(
+        JobGuide(
+            job = "cook",
+            category = ExpenseCategoryClassifier.CATEGORY_FOOD_CAFE,
+            description = "식비·카페 소비 비중이 높을 때"
+        ),
+        JobGuide(
+            job = "manager",
+            category = ExpenseCategoryClassifier.CATEGORY_LIVING_MART,
+            description = "생활·마트 소비 비중이 높을 때"
+        ),
+        JobGuide(
+            job = "merchant",
+            category = ExpenseCategoryClassifier.CATEGORY_SHOPPING_ONLINE,
+            description = "쇼핑·온라인 소비 비중이 높을 때"
+        ),
+        JobGuide(
+            job = "artist",
+            category = ExpenseCategoryClassifier.CATEGORY_CULTURE_LEISURE,
+            description = "문화·여가 소비 비중이 높을 때"
+        ),
+        JobGuide(
+            job = "planner",
+            category = ExpenseCategoryClassifier.CATEGORY_FIXED_SUBSCRIPTION,
+            description = "고정비·구독 소비 비중이 높을 때"
+        ),
+        JobGuide(
+            job = "healer",
+            category = ExpenseCategoryClassifier.CATEGORY_HEALTH_MEDICAL,
+            description = "건강·의료 소비 비중이 높을 때"
+        )
+    )
 
     fun jobReason(
         job: String,

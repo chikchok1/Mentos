@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +71,9 @@ fun HomeScreen(navController: NavController) {
     val jobTitle    = UserStatsCalculator.jobTitle(currentJob)
     val levelTitle  = UserStatsCalculator.levelTitle(currentLevel)
     val jobReason   = userStats.jobReason
+    val safeJobReason = jobReason.trim().takeIf { it.isNotBlank() }
+        ?: "이번 달 소비 패턴이 반영되었어요."
+    val jobGuides = UserStatsCalculator.jobGuides()
 
     var showJobDialog by remember { mutableStateOf(false) }
 
@@ -103,74 +105,133 @@ fun HomeScreen(navController: NavController) {
             onDismissRequest = { showJobDialog = false },
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 28.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color.White)
+                    .fillMaxSize()
+                    .padding(horizontal = 28.dp, vertical = 24.dp),
+                contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = maxHeight)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(Color.White)
+                        .padding(horizontal = 24.dp, vertical = 28.dp)
                 ) {
-                    // ── 아이콘 원형 배지 ──────────────────────────
-                    Box(
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
-                            .size(72.dp)
-                            .background(Blue50, CircleShape),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
                     ) {
                         Text(
-                            text     = jobEmoji,
-                            fontSize = 32.sp
+                            text = "나의 직업",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Gray900,
+                            letterSpacing = 0.sp,
                         )
+
+                        Spacer(Modifier.height(18.dp))
+
+                        // ── 아이콘 원형 배지 ──────────────────────────
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .background(Blue50, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = jobEmoji,
+                                fontSize = 32.sp
+                            )
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Text(
+                            text = jobTitle,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Gray900,
+                            letterSpacing = 0.sp,
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .background(Blue50, RoundedCornerShape(50))
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "이번 달 직업",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Blue500,
+                                letterSpacing = 0.sp,
+                            )
+                        }
+
+                        Spacer(Modifier.height(22.dp))
+
+                        JobInfoSection(title = "현재 직업 안내") {
+                            Text(
+                                text = safeJobReason,
+                                fontSize = 14.sp,
+                                color = Gray700,
+                                lineHeight = 22.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        JobInfoSection(title = "직업 변경 기준") {
+                            Text(
+                                text = "직업은 이번 달 소비 카테고리 비중을 기준으로 자동 부여되며, 소비 패턴이 달라지면 같은 달 안에서도 변경될 수 있어요.",
+                                fontSize = 13.sp,
+                                color = Gray600,
+                                lineHeight = 20.sp,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        JobInfoSection(title = "대표 직업 예시") {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                jobGuides.forEach { guide ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text(
+                                            text = UserStatsCalculator.jobTitle(guide.job),
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Gray900,
+                                            modifier = Modifier.width(76.dp)
+                                        )
+                                        Text(
+                                            text = guide.description,
+                                            fontSize = 13.sp,
+                                            color = Gray600,
+                                            lineHeight = 19.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     Spacer(Modifier.height(20.dp))
-
-                    // ── 직업명 ────────────────────────────────────────────
-                    Text(
-                        text          = jobTitle,
-                        fontSize      = 22.sp,
-                        fontWeight    = FontWeight.Bold,
-                        color         = Gray900,
-                        letterSpacing = (-0.3).sp,
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    // ── 서브 태그 ─────────────────────────────────────────
-                    Box(
-                        modifier = Modifier
-                            .background(Blue50, RoundedCornerShape(50))
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text          = "이번 달 직업",
-                            fontSize      = 11.sp,
-                            fontWeight    = FontWeight.SemiBold,
-                            color         = Blue500,
-                            letterSpacing = 0.3.sp,
-                        )
-                    }
-
-                    Spacer(Modifier.height(24.dp))
-
-                    HorizontalDivider(color = Gray200)
-
-                    Spacer(Modifier.height(20.dp))
-
-                    // ── 이유 텍스트 ───────────────────────────────────────
-                    Text(
-                        text       = jobReason,
-                        fontSize   = 14.sp,
-                        color      = Gray600,
-                        lineHeight = 22.sp,
-                        textAlign  = TextAlign.Center,
-                    )
-
-                    Spacer(Modifier.height(28.dp))
 
                     // ── 확인 버튼 ─────────────────────────────────────────
                     Button(
@@ -430,5 +491,30 @@ fun HomeScreen(navController: NavController) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun JobInfoSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFFF8FAFF))
+            .border(0.5.dp, Blue50, RoundedCornerShape(18.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Text(
+            text = title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Blue500,
+            letterSpacing = 0.sp
+        )
+        Spacer(Modifier.height(10.dp))
+        content()
     }
 }
