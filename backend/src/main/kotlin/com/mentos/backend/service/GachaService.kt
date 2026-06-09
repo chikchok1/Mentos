@@ -43,7 +43,7 @@ class GachaService(
         val validOwnedItems = user.ownedItems.filter { !GachaItemPool.isLegacyItem(it) }.toSet()
 
         // 가챠 굴리기
-        val result = GachaEngine.roll(validOwnedItems)
+        val result = GachaEngine.roll(validOwnedItems, GachaType.ATTENDANCE)
 
         var isDuplicate = false
         var coinReward = 0
@@ -115,18 +115,18 @@ class GachaService(
     fun performCoinGacha(userId: Long): Map<String, Any> {
         val user = userRepository.findById(userId).orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
 
-        if (user.coins < 10) {
-            throw IllegalStateException("코인이 부족합니다. (보유: ${user.coins}, 필요: 10)")
+        if (user.coins < 150) {
+            throw IllegalStateException("코인이 부족합니다. (보유: ${user.coins}, 필요: 150)")
         }
 
         // 코인 차감
-        user.coins -= 10
+        user.coins -= 150
 
         // 구형 아이템을 제외한 보유 목록으로 중복 판정
         val validOwnedItems = user.ownedItems.filter { !GachaItemPool.isLegacyItem(it) }.toSet()
 
         // 가챠 굴리기
-        val result = GachaEngine.roll(validOwnedItems)
+        val result = GachaEngine.roll(validOwnedItems, GachaType.COIN)
 
         var isDuplicate = false
         var coinReward = 0

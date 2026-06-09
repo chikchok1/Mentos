@@ -174,20 +174,39 @@ object GachaItemPool {
 
 // ── 가챠 엔진 ─────────────────────────────────────────────────────────────────
 
+enum class GachaType {
+    ATTENDANCE, COIN
+}
+
 object GachaEngine {
 
-    fun rollGrade(): GachaGrade {
+    fun rollGrade(type: GachaType): GachaGrade {
+        val weights = when (type) {
+            GachaType.ATTENDANCE -> listOf(
+                GachaGrade.COMMON to 70,
+                GachaGrade.RARE to 20,
+                GachaGrade.UNIQUE to 8,
+                GachaGrade.LEGENDARY to 2
+            )
+            GachaType.COIN -> listOf(
+                GachaGrade.COMMON to 50,
+                GachaGrade.RARE to 30,
+                GachaGrade.UNIQUE to 15,
+                GachaGrade.LEGENDARY to 5
+            )
+        }
+
         val roll = (1..100).random()
         var cumulative = 0
-        for (grade in GachaGrade.entries) {
-            cumulative += grade.weight
+        for ((grade, weight) in weights) {
+            cumulative += weight
             if (roll <= cumulative) return grade
         }
         return GachaGrade.COMMON
     }
 
-    fun roll(ownedItemIds: Set<String>): GachaResult {
-        val grade = rollGrade()
+    fun roll(ownedItemIds: Set<String>, type: GachaType): GachaResult {
+        val grade = rollGrade(type)
         val item  = GachaItemPool.randomOf(grade)
 
         return if (item.id in ownedItemIds) {

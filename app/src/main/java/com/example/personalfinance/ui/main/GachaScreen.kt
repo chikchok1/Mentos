@@ -120,7 +120,7 @@ fun GachaScreen(navController: NavController) {
             id           = "coin",
             icon         = Icons.Rounded.MonetizationOn,
             title        = "코인 캡슐머신",
-            descriptions = listOf("코인 10개를 소모해서 보상받으세요"),
+            descriptions = listOf("코인 150개를 소모해서 보상받으세요"),
             buttonText   = "코인 사용하고 뽑기",
             accentColor  = Color(0xFFFFB800),
         ),
@@ -222,7 +222,7 @@ fun GachaScreen(navController: NavController) {
                 val available = when (machine.id) {
                     "attendance" -> !attendanceUsed
                     "ad"         -> !adWatched
-                    "coin"       -> coins >= 10
+                    "coin"       -> coins >= 150
                     else         -> false
                 }
                 val statusLabel = when (machine.id) {
@@ -326,7 +326,7 @@ fun GachaScreen(navController: NavController) {
                                             }
                                         } else {
                                             val errBody = response.errorBody()?.string() ?: ""
-                                            val msg = if (errBody.contains("부족")) "코인이 부족합니다 (필요: 10개)" else "오류가 발생했습니다."
+                                            val msg = if (errBody.contains("부족")) "코인이 부족합니다 (필요: 150개)" else "오류가 발생했습니다."
                                             android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                     } catch (e: Exception) {
@@ -373,16 +373,16 @@ fun GachaScreen(navController: NavController) {
 private data class GradeInfo(val name: String, val pct: String, val color: Color)
 
 private val attendanceGrades = listOf(
-    GradeInfo("Common",    "60%", Color(0xFF9E9E9E)),
-    GradeInfo("Rare",      "25%", Color(0xFF1976D2)),
-    GradeInfo("Unique",    "10%", Color(0xFF7B1FA2)),
-    GradeInfo("Legendary",  "5%", Color(0xFFE65100)),
+    GradeInfo("Common",    "70%", Color(0xFF9E9E9E)),
+    GradeInfo("Rare",      "20%", Color(0xFF1976D2)),
+    GradeInfo("Unique",    "8%", Color(0xFF7B1FA2)),
+    GradeInfo("Legendary",  "2%", Color(0xFFE65100)),
 )
 
 private val coinGrades = listOf(
-    GradeInfo("Common",    "55%", Color(0xFF9E9E9E)),
+    GradeInfo("Common",    "50%", Color(0xFF9E9E9E)),
     GradeInfo("Rare",      "30%", Color(0xFF1976D2)),
-    GradeInfo("Unique",    "10%", Color(0xFF7B1FA2)),
+    GradeInfo("Unique",    "15%", Color(0xFF7B1FA2)),
     GradeInfo("Legendary",  "5%", Color(0xFFE65100)),
 )
 
@@ -519,7 +519,7 @@ private fun GachaProbabilityDialog(onDismiss: () -> Unit) {
                 val note = if (selectedTab == 0)
                     "출석 가챠는 매일 무료로 한 번 참여할 수 있어요."
                 else
-                    "코인 가챠는 코인 10개를 소모해 참여해요."
+                    "코인 가챠는 코인 150개를 소모해 참여해요."
                 Text(
                     text  = note,
                     style = MaterialTheme.typography.bodySmall,
