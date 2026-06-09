@@ -16,7 +16,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.example.personalfinance.data.TokenManager
 import com.example.personalfinance.data.CharacterAppearanceStore
@@ -37,6 +40,7 @@ import com.example.personalfinance.ui.main.FriendComparisonScreen
 import com.example.personalfinance.ui.main.FriendsScreen
 import com.example.personalfinance.ui.main.GachaDebugScreen
 import com.example.personalfinance.ui.main.ProfileScreen
+import com.example.personalfinance.ui.main.PermissionSettingsScreen
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 sealed class Screen(val route: String) {
@@ -56,6 +60,7 @@ sealed class Screen(val route: String) {
     object NotificationDebug : Screen("notification_debug")
     object CharacterLayerTest : Screen("character_layer_test")
     object GachaDebug : Screen("gacha_debug")
+    object PermissionSettings : Screen("permission_settings")
 }
 
 // ── Navigation Host ───────────────────────────────────────────────────────────
@@ -172,7 +177,69 @@ fun AppNavigation(tokenManager: TokenManager) {
                 }
             ) 
         }
-        composable(Screen.Home.route)      { HomeScreen(navController)      }
+        composable(Screen.Home.route) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            var showPermissionDialog by remember { mutableStateOf(false) }
+
+            val multiLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+            ) {
+                showPermissionDialog = false
+            }
+
+            LaunchedEffect(Unit) {
+                val hasNoti = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } else true
+                val hasLoc = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                
+                if (!hasNoti || !hasLoc) {
+                    showPermissionDialog = true
+                }
+            }
+            
+            HomeScreen(navController)
+
+            if (showPermissionDialog) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showPermissionDialog = false },
+                    title = { androidx.compose.material3.Text("앱 이용을 위한 권한 안내", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                    text = {
+                        androidx.compose.foundation.layout.Column {
+                            androidx.compose.material3.Text("원활한 서비스 제공을 위해 다음 권한이 필요합니다.", style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
+                            androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(12.dp))
+                            androidx.compose.material3.Text("🔔 알림 허용", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                            androidx.compose.material3.Text("알림을 허용해야 결제 내역을 실시간으로 추적할 수 있습니다.", color = androidx.compose.ui.graphics.Color.DarkGray, fontSize = 13.sp)
+                            androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(8.dp))
+                            androidx.compose.material3.Text("📍 위치 허용", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                            androidx.compose.material3.Text("위치를 허용해야 결제 장소를 정확하게 파악하고 분류할 수 있습니다.", color = androidx.compose.ui.graphics.Color.DarkGray, fontSize = 13.sp)
+                            androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+                            androidx.compose.material3.Text("지금 권한을 허용하시겠습니까?", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                val perms = mutableListOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                    perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                                multiLauncher.launch(perms.toTypedArray())
+                            }
+                        ) {
+                            androidx.compose.material3.Text("권한 허용하기")
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { showPermissionDialog = false }
+                        ) {
+                            androidx.compose.material3.Text("나중에", color = androidx.compose.ui.graphics.Color.Gray)
+                        }
+                    }
+                )
+            }
+        }
         composable(Screen.Ledger.route)    { LedgerScreen(navController)    }
         composable(Screen.NewRecord.route) { NewRecordScreen(navController) }
         composable(Screen.Menu.route)      { 
@@ -205,6 +272,7 @@ fun AppNavigation(tokenManager: TokenManager) {
         composable(Screen.Shop.route)                 { ShopScreen(navController)                 }
         composable(Screen.CharacterLayerTest.route)   { CharacterLayerTestScreen(navController)   }
         composable(Screen.GachaDebug.route)           { GachaDebugScreen(navController)           }
+        composable(Screen.PermissionSettings.route)   { PermissionSettingsScreen(navController)   }
     }
 }
 
