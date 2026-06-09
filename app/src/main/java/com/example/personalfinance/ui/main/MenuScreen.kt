@@ -47,11 +47,9 @@ fun MenuScreen(
     val userStats  by store.statsFlow.collectAsState()
     val nickname   by store.nicknameFlow.collectAsState()
     val level      = userStats.currentLevel
-    val xp         = userStats.currentXP
     val levelTitle = UserStatsCalculator.levelTitle(level)
     val currentJob = UserStatsCalculator.determineJob(userStats.categorySpending)
     val jobTitle   = UserStatsCalculator.jobTitle(currentJob)
-    val itemCount  by store.transactionsFlow.collectAsState()
 
     Column(
         modifier = Modifier
@@ -143,7 +141,7 @@ fun MenuScreen(
         }
 
         // ── Settings ──────────────────────────────────────────────────────────
-        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+        Column(modifier = Modifier.padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)) {
             Text(
                 "설정",
                 style      = MaterialTheme.typography.bodySmall,
@@ -189,36 +187,6 @@ fun MenuScreen(
             ) {
                 Text("로그아웃", style = MaterialTheme.typography.bodyLarge, color = Color(0xFFD32F2F))
                 Icon(Icons.Rounded.Logout, null, tint = Color(0xFFD32F2F))
-            }
-        }
-
-        // ── My Stats ──────────────────────────────────────────────────────────
-        Column(modifier = Modifier.padding(24.dp)) {
-            Text(
-                "나의 통계",
-                style      = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color      = Gray500,
-                modifier   = Modifier.padding(bottom = 12.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Brush.linearGradient(listOf(Blue50, Purple50)))
-                    .padding(24.dp)
-            ) {
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    listOf("$level" to "레벨", "$xp" to "XP", "${itemCount.size}" to "아이템").forEach { (value, label) ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text(label, style = MaterialTheme.typography.bodySmall, color = Gray600, modifier = Modifier.padding(top = 4.dp))
-                        }
-                    }
-                }
             }
         }
     }
