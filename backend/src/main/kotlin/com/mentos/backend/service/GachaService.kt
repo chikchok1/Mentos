@@ -48,18 +48,21 @@ class GachaService(
         var isDuplicate = false
         var coinReward = 0
         var itemId = ""
+        var itemName = ""
 
         when (result) {
             is GachaResult.NewItem -> {
                 user.ownedItems.removeIf { GachaItemPool.isLegacyItem(it) } // 혹시 남은 구형 제거
                 user.ownedItems.add(result.item.id)
                 itemId = result.item.id
+                itemName = result.item.name
             }
             is GachaResult.DuplicateCoin -> {
                 isDuplicate = true
                 coinReward = result.coins
                 user.coins += coinReward
                 itemId = result.item.id
+                itemName = result.item.name
             }
         }
 
@@ -70,6 +73,7 @@ class GachaService(
             "success"     to true,
             "message"     to "출석 가챠가 완료되었습니다.",
             "itemId"      to itemId,
+            "itemName"    to itemName,
             "isDuplicate" to isDuplicate,
             "coinReward"  to coinReward,
             "totalCoins"  to user.coins
@@ -127,18 +131,21 @@ class GachaService(
         var isDuplicate = false
         var coinReward = 0
         var itemId = ""
+        var itemName = ""
 
         when (result) {
             is GachaResult.NewItem -> {
                 user.ownedItems.removeIf { GachaItemPool.isLegacyItem(it) } // 혹시 남은 구형 제거
                 user.ownedItems.add(result.item.id)
                 itemId = result.item.id
+                itemName = result.item.name
             }
             is GachaResult.DuplicateCoin -> {
                 isDuplicate = true
                 coinReward = result.coins
                 user.coins += coinReward
                 itemId = result.item.id
+                itemName = result.item.name
             }
         }
 
@@ -148,6 +155,7 @@ class GachaService(
             "success"     to true,
             "message"     to "코인 가챠가 완료되었습니다.",
             "itemId"      to itemId,
+            "itemName"    to itemName,
             "isDuplicate" to isDuplicate,
             "coinReward"  to coinReward,
             "totalCoins"  to user.coins
