@@ -104,7 +104,11 @@ object ItemNames {
     )
 
     /** 파일명(확장자 포함)을 한글 이름으로 변환. 매핑 없으면 null 반환. */
-    fun of(filename: String?): String? = filename?.let { map[it] }
+    fun of(filename: String?): String? {
+        if (filename == null) return null
+        val key = if (filename.endsWith(".png")) filename else "$filename.png"
+        return map[key]
+    }
 
     /**
      * 파일명 → 한글 이름 변환. 매핑 없으면 기존 영문 파싱 결과로 폴백.
@@ -112,7 +116,8 @@ object ItemNames {
      */
     fun display(filename: String?): String {
         if (filename == null) return "없음"
-        return map[filename] ?: fallback(filename)
+        val key = if (filename.endsWith(".png")) filename else "$filename.png"
+        return map[key] ?: fallback(filename)
     }
 
     /** 매핑 테이블에 없는 파일명을 위한 폴백 — 기존 로직 유지 */

@@ -247,6 +247,8 @@ fun GachaScreen(navController: NavController) {
                                         if (response.isSuccessful) {
                                             val body       = response.body()
                                             val itemId     = body?.get("itemId") as? String
+                                            val filename   = itemId?.substringAfterLast("/")
+                                            val itemName   = filename?.let { ItemNames.display(it) } ?: body?.get("itemName") as? String ?: ""
                                             val isDup      = body?.get("isDuplicate") as? Boolean ?: false
                                             val coinRew    = (body?.get("coinReward") as? Number)?.toInt() ?: 0
                                             val totalCoins = (body?.get("totalCoins") as? Number)?.toInt() ?: 0
@@ -254,7 +256,7 @@ fun GachaScreen(navController: NavController) {
                                                 val grade = gradeFromItemId(itemId)
                                                 val item  = GachaItem(
                                                     id    = itemId,
-                                                    name  = itemId.substringAfterLast("/").removeSuffix(".png"),
+                                                    name  = itemName,
                                                     grade = grade,
                                                 )
                                                 // 신규 아이템이면 로컬 ShopStore에 저장 (앱 재설치 시 서버에서 복원)
@@ -292,6 +294,8 @@ fun GachaScreen(navController: NavController) {
                                         if (response.isSuccessful) {
                                             val body       = response.body()
                                             val itemId     = body?.get("itemId") as? String
+                                            val filename   = itemId?.substringAfterLast("/")
+                                            val itemName   = filename?.let { ItemNames.display(it) } ?: body?.get("itemName") as? String ?: ""
                                             val isDup      = body?.get("isDuplicate") as? Boolean ?: false
                                             val coinRew    = (body?.get("coinReward") as? Number)?.toInt() ?: 0
                                             val totalCoins = (body?.get("totalCoins") as? Number)?.toInt() ?: 0
@@ -299,7 +303,7 @@ fun GachaScreen(navController: NavController) {
                                                 val grade = gradeFromItemId(itemId)
                                                 val item  = GachaItem(
                                                     id    = itemId,
-                                                    name  = itemId.substringAfterLast("/").removeSuffix(".png"),
+                                                    name  = itemName,
                                                     grade = grade,
                                                 )
                                                 // 신규 아이템이면 로컬 ShopStore에 저장 (앱 재설치 시 서버에서 복원)
