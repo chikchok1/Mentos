@@ -32,7 +32,6 @@ import com.example.personalfinance.ui.components.CharacterLayerPreview
 import com.example.personalfinance.ui.theme.*
 import java.time.YearMonth
 import java.time.LocalDateTime
-import kotlinx.coroutines.delay
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
@@ -74,16 +73,7 @@ fun HomeScreen(navController: NavController) {
     val levelTitle  = UserStatsCalculator.levelTitle(currentLevel)
     val jobReason   = userStats.jobReason
 
-    // 직업 이유 팝업
     var showJobDialog by remember { mutableStateOf(false) }
-
-    // 직업 변경 토스트
-    var jobChangedMessage by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        store.jobChangedFlow.collect { newJobTitle ->
-            jobChangedMessage = "${newJobTitle}이(가) 되었어요!"
-        }
-    }
 
     val appearanceStore = remember { CharacterAppearanceStore.getInstance(context) }
     val characterAppearance by appearanceStore.appearanceFlow.collectAsState()
@@ -124,21 +114,11 @@ fun HomeScreen(navController: NavController) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp)
                 ) {
-                    // ── 이모지 아이콘 원형 배지 ──────────────────────────
+                    // ── 아이콘 원형 배지 ──────────────────────────
                     Box(
                         modifier = Modifier
                             .size(72.dp)
-                            .background(
-                                Brush.linearGradient(listOf(Blue50, Purple50)),
-                                CircleShape
-                            )
-                            .border(
-                                width = 1.5.dp,
-                                brush = Brush.linearGradient(
-                                    listOf(Blue300.copy(alpha = 0.6f), Purple400.copy(alpha = 0.4f))
-                                ),
-                                shape = CircleShape
-                            ),
+                            .background(Blue50, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -151,10 +131,10 @@ fun HomeScreen(navController: NavController) {
 
                     // ── 직업명 ────────────────────────────────────────────
                     Text(
-                        text       = jobTitle,
-                        fontSize   = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color      = Gray900,
+                        text          = jobTitle,
+                        fontSize      = 22.sp,
+                        fontWeight    = FontWeight.Bold,
+                        color         = Gray900,
                         letterSpacing = (-0.3).sp,
                     )
 
@@ -163,24 +143,20 @@ fun HomeScreen(navController: NavController) {
                     // ── 서브 태그 ─────────────────────────────────────────
                     Box(
                         modifier = Modifier
-                            .background(
-                                Brush.horizontalGradient(listOf(Blue500, Purple500)),
-                                RoundedCornerShape(50)
-                            )
+                            .background(Blue50, RoundedCornerShape(50))
                             .padding(horizontal = 12.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text      = "이번 달 직업",
-                            fontSize  = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color     = Color.White,
+                            text          = "이번 달 직업",
+                            fontSize      = 11.sp,
+                            fontWeight    = FontWeight.SemiBold,
+                            color         = Blue500,
                             letterSpacing = 0.3.sp,
                         )
                     }
 
                     Spacer(Modifier.height(24.dp))
 
-                    // ── 구분선 ────────────────────────────────────────────
                     HorizontalDivider(color = Gray200)
 
                     Spacer(Modifier.height(20.dp))
@@ -198,33 +174,20 @@ fun HomeScreen(navController: NavController) {
 
                     // ── 확인 버튼 ─────────────────────────────────────────
                     Button(
-                        onClick = { showJobDialog = false },
-                        modifier = Modifier
+                        onClick    = { showJobDialog = false },
+                        modifier   = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent
-                        ),
-                        contentPadding = PaddingValues(0.dp),
-                        elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp),
+                        shape      = RoundedCornerShape(14.dp),
+                        colors     = ButtonDefaults.buttonColors(containerColor = Blue500),
+                        elevation  = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.horizontalGradient(listOf(Blue500, Purple500)),
-                                    RoundedCornerShape(14.dp)
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text       = "확인",
-                                fontSize   = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color      = Color.White,
-                            )
-                        }
+                        Text(
+                            text       = "확인",
+                            fontSize   = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = Color.White,
+                        )
                     }
                 }
             }
@@ -236,12 +199,12 @@ fun HomeScreen(navController: NavController) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color.White, Gray50)))
+                .background(Color.White)
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = navBarHeight)
         ) {
 
-            // Header
+            // ── Header ────────────────────────────────────────────────────
             Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp)) {
                 Text(
                     text  = java.time.LocalDate.now().let { "${it.year}년 ${it.monthValue}월 ${it.dayOfMonth}일" },
@@ -255,7 +218,7 @@ fun HomeScreen(navController: NavController) {
                 )
             }
 
-            // Character section
+            // ── Character section ─────────────────────────────────────────
             AnimatedVisibility(
                 visible = visible,
                 enter   = scaleIn(initialScale = 0.8f, animationSpec = tween(500)) + fadeIn(tween(500))
@@ -273,48 +236,51 @@ fun HomeScreen(navController: NavController) {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 직업 뱃지 — 터치 시 이유 팝업 표시
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                Brush.horizontalGradient(listOf(Blue50, Purple50)),
-                                RoundedCornerShape(50)
-                            )
-                            .clickable { showJobDialog = true }
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text       = "Lv.$currentLevel $levelTitle · $jobTitle",
-                            style      = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color      = Blue500
-                        )
-                    }
+                    // 직업 배지 — 단순 텍스트, 터치 시 이유 팝업
+                    Text(
+                        text       = "Lv.$currentLevel $levelTitle · $jobTitle",
+                        style      = MaterialTheme.typography.bodySmall,
+                        color      = Gray500,
+                        modifier   = Modifier.clickable { showJobDialog = true }
+                    )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    LinearProgressIndicator(
-                        progress   = { xpProgress },
-                        modifier   = Modifier
-                            .width(160.dp)
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color      = Blue500,
-                        trackColor = Gray100
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text  = "$xpInLevel / $xpToNext XP",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Gray400
-                    )
+                    // ── XP 바 + 획득 pill ──────────────────────────────────
+                    Box(
+                        modifier = Modifier
+                            .width(200.dp)
+                    ) {
+                        Column {
+                            LinearProgressIndicator(
+                                progress   = { xpProgress },
+                                modifier   = Modifier
+                                    .fillMaxWidth()
+                                    .height(5.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color      = Blue500,
+                                trackColor = Blue50
+                            )
+                            Spacer(modifier = Modifier.height(5.dp))
+                            Row(
+                                modifier              = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment     = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text  = "$xpInLevel / $xpToNext XP",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Gray400
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Spending card
+            // ── Spending card ─────────────────────────────────────────────
             AnimatedVisibility(
                 visible = visible,
                 enter   = slideInVertically(tween(500, 200)) { it / 3 } + fadeIn(tween(500, 200))
@@ -323,9 +289,9 @@ fun HomeScreen(navController: NavController) {
                     modifier = Modifier
                         .padding(horizontal = 24.dp)
                         .fillMaxWidth()
-                        .shadow(8.dp, RoundedCornerShape(20.dp))
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Brush.linearGradient(listOf(Blue50, Purple50)))
+                        .background(Color(0xFFFAFAFA))
+                        .border(0.5.dp, Gray200, RoundedCornerShape(20.dp))
                         .clickable { navController.navigate(Screen.Ledger.route) }
                         .padding(24.dp)
                 ) {
@@ -338,7 +304,7 @@ fun HomeScreen(navController: NavController) {
                             Text(
                                 text  = "이번 달 지출",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Gray600
+                                color = Gray500
                             )
                             Icon(
                                 imageVector        = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
@@ -347,39 +313,50 @@ fun HomeScreen(navController: NavController) {
                                 modifier           = Modifier.size(20.dp)
                             )
                         }
+
                         Text(
                             text       = "₩${String.format("%,d", thisMonthSpending)}",
                             style      = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier   = Modifier.padding(top = 8.dp, bottom = 20.dp)
+                            fontWeight = FontWeight.Medium,
+                            modifier   = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
 
                         Text(
-                            text = "월 예산 ₩${String.format("%,d", userStats.monthlyBudget)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Gray500,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            text     = "월 예산 ₩${String.format("%,d", userStats.monthlyBudget)}",
+                            style    = MaterialTheme.typography.bodySmall,
+                            color    = Gray400,
+                            modifier = Modifier.padding(bottom = 16.dp)
                         )
 
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+                        HorizontalDivider(color = Gray200, modifier = Modifier.padding(bottom = 12.dp))
+
+                        // 지난달 대비
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier          = Modifier.padding(bottom = 8.dp)
+                        ) {
                             val isDown = (lastMonthChange ?: 0) <= 0
                             Box(
-                                modifier         = Modifier.size(36.dp).background(
-                                    if (isDown) Color(0xFFDCFCE7) else Color(0xFFFFE4E6), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    if (isDown) Icons.AutoMirrored.Rounded.TrendingDown else Icons.AutoMirrored.Rounded.TrendingUp,
-                                    null,
-                                    tint     = if (isDown) GreenSuccess else RedDanger,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(12.dp))
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(
+                                        if (isDown) GreenSuccess else RedDanger,
+                                        CircleShape
+                                    )
+                            )
+                            Spacer(Modifier.width(10.dp))
                             if (lastMonthChange == null) {
-                                Text("지난달 데이터 없음", style = MaterialTheme.typography.bodyMedium, color = Gray500)
+                                Text(
+                                    "지난달 데이터 없음",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Gray500
+                                )
                             } else {
-                                Text("지난달 대비 ", style = MaterialTheme.typography.bodyMedium, color = Gray700)
+                                Text(
+                                    "지난달 대비 ",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Gray600
+                                )
                                 Text(
                                     "${if (lastMonthChange >= 0) "+" else ""}${lastMonthChange}%",
                                     style      = MaterialTheme.typography.bodyMedium,
@@ -389,50 +366,43 @@ fun HomeScreen(navController: NavController) {
                             }
                         }
 
+                        // 최다 카테고리
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
-                                modifier         = Modifier.size(36.dp).background(Color(0xFFFFF7ED), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Rounded.Restaurant, null, tint = OrangeWarning, modifier = Modifier.size(18.dp))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Text("가장 많이 사용한 카테고리: ", style = MaterialTheme.typography.bodyMedium, color = Gray700)
-                            Text(topCategory, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(Blue500, CircleShape)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "최다 카테고리 ",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Gray600
+                            )
+                            Text(
+                                topCategory,
+                                style      = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
             }
         }
 
-        // 직업 변경 토스트
-        jobChangedMessage?.let { msg ->
-            LaunchedEffect(msg) {
-                delay(2500)
-                jobChangedMessage = null
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 56.dp)
-                    .background(Color(0xFF1E1E2E), RoundedCornerShape(50))
-                    .padding(horizontal = 20.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text       = msg,
-                    color      = Color.White,
-                    style      = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
+        UserStatsFeedbackHost(
+            store    = store,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 16.dp, end = 16.dp, bottom = navBarHeight + 16.dp)
+        )
 
-        // Bottom Navigation
+        // ── Bottom Navigation ─────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .shadow(12.dp)
+                .shadow(4.dp)
                 .background(Color.White)
                 .padding(start = 32.dp, end = 32.dp, top = 16.dp, bottom = 16.dp + bottomInset)
         ) {
@@ -442,16 +412,13 @@ fun HomeScreen(navController: NavController) {
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { navController.navigate(Screen.Ledger.route) }) {
-                    Icon(Icons.AutoMirrored.Rounded.MenuBook, contentDescription = "가계부", tint = Gray600)
+                    Icon(Icons.AutoMirrored.Rounded.MenuBook, contentDescription = "가계부", tint = Gray400)
                 }
                 Box(
                     modifier = Modifier
                         .size(56.dp)
-                        .shadow(12.dp, CircleShape)
-                        .background(
-                            Brush.linearGradient(listOf(Blue500, Purple500)),
-                            CircleShape
-                        )
+                        .shadow(8.dp, CircleShape)
+                        .background(Blue500, CircleShape)
                         .clip(CircleShape)
                         .clickable { navController.navigate(Screen.NewRecord.route) },
                     contentAlignment = Alignment.Center
@@ -459,7 +426,7 @@ fun HomeScreen(navController: NavController) {
                     Icon(Icons.Rounded.Add, contentDescription = "추가", tint = Color.White, modifier = Modifier.size(28.dp))
                 }
                 IconButton(onClick = { navController.navigate(Screen.Menu.route) }) {
-                    Icon(Icons.Rounded.Menu, contentDescription = "메뉴", tint = Gray600)
+                    Icon(Icons.Rounded.Menu, contentDescription = "메뉴", tint = Gray400)
                 }
             }
         }

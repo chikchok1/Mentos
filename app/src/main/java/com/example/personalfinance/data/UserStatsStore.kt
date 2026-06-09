@@ -20,12 +20,10 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -59,6 +57,28 @@ data class UserProfile(
     val friendCode: String = "",
     val displayName: String = ""
 )
+
+sealed class UserStatsFeedback(open val id: Long) {
+    data class XpGained(
+        override val id: Long,
+        val earnedXp: Int,
+        val message: String
+    ) : UserStatsFeedback(id)
+
+    data class LevelUp(
+        override val id: Long,
+        val previousLevel: Int,
+        val currentLevel: Int
+    ) : UserStatsFeedback(id)
+
+    data class JobChanged(
+        override val id: Long,
+        val previousJob: String,
+        val currentJob: String,
+        val currentJobTitle: String,
+        val reason: String
+    ) : UserStatsFeedback(id)
+}
 
 object UserStatsCalculator {
     private val levelThresholds = listOf(
@@ -256,9 +276,9 @@ class UserStatsStore private constructor(context: Context) {
     private val _transactionsFlow = MutableStateFlow(loadTransactions())
     val transactionsFlow: StateFlow<List<Transaction>> = _transactionsFlow.asStateFlow()
 
-    // 직업 변경 이벤트 — 변경된 직업 한글 이름을 방출
-    private val _jobChangedFlow = MutableSharedFlow<String>(extraBufferCapacity = 1)
-    val jobChangedFlow: SharedFlow<String> = _jobChangedFlow.asSharedFlow()
+    private var feedbackSequence = 0L
+    private val _feedbackQueue = MutableStateFlow<List<UserStatsFeedback>>(emptyList())
+    val feedbackQueue: StateFlow<List<UserStatsFeedback>> = _feedbackQueue.asStateFlow()
 
     // ── 닉네임 ────────────────────────────────────────────────────────────────
     private val _nicknameFlow = MutableStateFlow(prefs.getString(KEY_NICKNAME, "") ?: "")
@@ -479,7 +499,7 @@ class UserStatsStore private constructor(context: Context) {
             val api = ApiClient.getUserApi(appContext, tokenManager)
             val resp = api.updateBudget(UpdateBudgetRequest(monthlyBudget))
             if (resp.isSuccessful) {
-                resp.body()?.let { applyServerStats(it) }
+                resp.body()?.let { applyServerStats(it, emitFeedback = false) }
                 true
             } else {
                 Log.w(TAG, "서버 예산 수정 실패 (HTTP ${resp.code()})")
@@ -527,6 +547,10 @@ class UserStatsStore private constructor(context: Context) {
             categorySpending = thisMonthCategorySpending,
             transactions = transactions
         )
+    }
+
+    fun consumeFeedback(id: Long) {
+        _feedbackQueue.update { queue -> queue.filterNot { it.id == id } }
     }
 
     fun addExpense(
@@ -586,12 +610,13 @@ class UserStatsStore private constructor(context: Context) {
                 thisMonthTxs.filter { it.category == cat }.sumOf { it.amount }
             }
 
-        val newTotalXP = current.currentXP + UserStatsCalculator.calculateEarnedXP(
+        val earnedXp = UserStatsCalculator.calculateEarnedXP(
             amount = amount,
             category = normalizedCategory,
             thisMonthSpending = newSpending,
             monthlyBudget = current.monthlyBudget
         )
+        val newTotalXP = current.currentXP + earnedXp
 
         val newStats = UserStats(
             currentLevel = UserStatsCalculator.calculateLevel(newTotalXP),
@@ -610,15 +635,15 @@ class UserStatsStore private constructor(context: Context) {
             transactions = newTransactions
         )
 
-        // 직업 변경 감지 — saveStats() 전에 비교
-        val oldJob = UserStatsCalculator.determineJob(current.categorySpending)
-        val newJob = UserStatsCalculator.determineJob(newCategorySpending)
-        if (oldJob != newJob) {
-            _jobChangedFlow.tryEmit(UserStatsCalculator.jobTitle(newJob))
-            Log.i(TAG, "직업 변경: $oldJob → $newJob")
-        }
-
         saveStats(newStats, newTransactions)
+        enqueueFeedback(
+            buildFeedbackEvents(
+                previous = current,
+                current = newStats,
+                earnedXp = earnedXp,
+                xpMessage = xpFeedbackMessage(earnedXp, newSpending, current.monthlyBudget)
+            )
+        )
 
         syncScope.launch {
             try {
@@ -677,13 +702,7 @@ class UserStatsStore private constructor(context: Context) {
                 thisMonthTxs.filter { it.category == cat }.sumOf { it.amount }
             }
 
-        // 카테고리 수정 시에도 직업 변경 감지
-        val oldJob = UserStatsCalculator.determineJob(current.categorySpending)
         val newJob = UserStatsCalculator.determineJob(newCategorySpending)
-        if (oldJob != newJob) {
-            _jobChangedFlow.tryEmit(UserStatsCalculator.jobTitle(newJob))
-            Log.i(TAG, "직업 변경 (카테고리 수정): $oldJob → $newJob")
-        }
 
         val newStats = current.copy(
             job = newJob,
@@ -695,6 +714,7 @@ class UserStatsStore private constructor(context: Context) {
         )
 
         saveStats(newStats, newTransactions)
+        enqueueFeedback(buildFeedbackEvents(previous = current, current = newStats))
 
         syncScope.launch {
             syncCategoryUpdateWithRetry(transactionId, normalizedCategory)
@@ -739,7 +759,92 @@ class UserStatsStore private constructor(context: Context) {
         _transactionsFlow.value = transactions
     }
 
-    private fun applyServerStats(serverStats: UserStatsResponse) {
+    private fun buildFeedbackEvents(
+        previous: UserStats,
+        current: UserStats,
+        earnedXp: Int = 0,
+        xpMessage: String? = null
+    ): List<UserStatsFeedback> {
+        val events = mutableListOf<UserStatsFeedback>()
+
+        if (current.currentLevel > previous.currentLevel) {
+            events += UserStatsFeedback.LevelUp(
+                id = nextFeedbackId(),
+                previousLevel = previous.currentLevel,
+                currentLevel = current.currentLevel
+            )
+        }
+
+        if (current.job != previous.job) {
+            events += UserStatsFeedback.JobChanged(
+                id = nextFeedbackId(),
+                previousJob = previous.job,
+                currentJob = current.job,
+                currentJobTitle = UserStatsCalculator.jobTitle(current.job),
+                reason = safeJobReason(current.jobReason)
+            )
+            Log.i(TAG, "직업 변경: ${previous.job} → ${current.job}")
+        }
+
+        if (earnedXp > 0 && xpMessage != null) {
+            events += UserStatsFeedback.XpGained(
+                id = nextFeedbackId(),
+                earnedXp = earnedXp,
+                message = xpMessage
+            )
+        }
+
+        return events
+    }
+
+    private fun enqueueFeedback(events: List<UserStatsFeedback>) {
+        if (events.isEmpty()) return
+        _feedbackQueue.update { queue -> queue + events }
+    }
+
+    private fun nextFeedbackId(): Long = synchronized(this) {
+        feedbackSequence += 1
+        feedbackSequence
+    }
+
+    private fun xpFeedbackMessage(
+        earnedXp: Int,
+        thisMonthSpending: Long,
+        monthlyBudget: Long
+    ): String {
+        val budgetRatio = if (monthlyBudget > 0L) {
+            thisMonthSpending.toFloat() / monthlyBudget.toFloat()
+        } else {
+            1f
+        }
+
+        return when {
+            budgetRatio > 1.0f -> "+${earnedXp} XP 획득! 예산 초과로 XP가 조정되었어요."
+            budgetRatio <= 0.8f -> "+${earnedXp} XP 획득! 예산 관리 보너스가 적용되었어요."
+            budgetRatio <= 1.0f -> "+${earnedXp} XP 획득! 이번 달 예산을 잘 지키고 있어요."
+            else -> "+${earnedXp} XP 획득! 소비 기록이 반영되었어요."
+        }
+    }
+
+    private fun safeJobReason(reason: String): String {
+        val bannedExpressions = listOf(
+            "소비할수록",
+            "많이 쓸수록",
+            "쇼핑 완료 보상",
+            "건강 소비 보너스",
+            "카페 소비 보너스",
+            "더 많이 쓰면",
+            "더 성장해요"
+        )
+
+        return if (reason.isBlank() || bannedExpressions.any { reason.contains(it) }) {
+            "이번 달 소비 패턴이 반영되었어요."
+        } else {
+            reason
+        }
+    }
+
+    private fun applyServerStats(serverStats: UserStatsResponse, emitFeedback: Boolean = true) {
         val normalizedCategories = ExpenseCategoryClassifier.categories.associateWith { category ->
             serverStats.categorySpending[category] ?: 0L
         }
@@ -758,6 +863,9 @@ class UserStatsStore private constructor(context: Context) {
         )
 
         saveStats(newStats, current.transactions)
+        if (emitFeedback) {
+            enqueueFeedback(buildFeedbackEvents(previous = current, current = newStats))
+        }
         applyProfile(
             UserProfileResponse(
                 id = null,

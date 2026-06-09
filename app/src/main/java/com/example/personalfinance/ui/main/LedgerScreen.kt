@@ -306,102 +306,111 @@ fun LedgerScreen(navController: NavController) {
     }
     val remainingBudget      = monthlyBudget - totalSpending.toLong()
 
-    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
-        // ── Header ───────────────────────────────────────────────────────────
-        Row(
-            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment     = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = { navController.popBackStack() }) {
-                Icon(Icons.Rounded.Close, null, tint = Gray600)
+            // ── Header ───────────────────────────────────────────────────────────
+            Row(
+                modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.Rounded.Close, null, tint = Gray600)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = {
+                        currentMonth = currentMonth.minusMonths(1)
+                        selectedCategory = null
+                    }) { Icon(Icons.Rounded.KeyboardArrowLeft, null, tint = Gray600) }
+                    Text(
+                        text      = "${currentMonth.year}년 ${currentMonth.monthValue}월",
+                        style     = MaterialTheme.typography.titleMedium,
+                        modifier  = Modifier.width(120.dp),
+                        textAlign = TextAlign.Center
+                    )
+                    IconButton(onClick = {
+                        currentMonth = currentMonth.plusMonths(1)
+                        selectedCategory = null
+                    }) { Icon(Icons.Rounded.KeyboardArrowRight, null, tint = Gray600) }
+                }
+                // 로딩 스피너 (서버 조회 중일 때)
+                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    if (statsLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Blue400)
+                    }
+                }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = {
-                    currentMonth = currentMonth.minusMonths(1)
-                    selectedCategory = null
-                }) { Icon(Icons.Rounded.KeyboardArrowLeft, null, tint = Gray600) }
-                Text(
-                    text      = "${currentMonth.year}년 ${currentMonth.monthValue}월",
-                    style     = MaterialTheme.typography.titleMedium,
-                    modifier  = Modifier.width(120.dp),
-                    textAlign = TextAlign.Center
-                )
-                IconButton(onClick = {
-                    currentMonth = currentMonth.plusMonths(1)
-                    selectedCategory = null
-                }) { Icon(Icons.Rounded.KeyboardArrowRight, null, tint = Gray600) }
+
+            // ── Tab Row ───────────────────────────────────────────────────────────
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor   = Color.White,
+                contentColor     = Blue500,
+                divider          = { HorizontalDivider(color = Gray100) }
+            ) {
+                listOf("가계부", "동향 변화", "예산 관리").forEachIndexed { i, title ->
+                    Tab(
+                        selected = selectedTab == i,
+                        onClick  = { selectedTab = i },
+                        text = {
+                            Text(
+                                title,
+                                color      = if (selectedTab == i) Blue500 else Gray400,
+                                fontWeight = if (selectedTab == i) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                        }
+                    )
+                }
             }
-            // 로딩 스피너 (서버 조회 중일 때)
-            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                if (statsLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Blue400)
+
+            // ── Tab Content ───────────────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 24.dp)
+            ) {
+                when (selectedTab) {
+                    0 -> LedgerTab(
+                        categories         = categories,
+                        transactions       = transactions,
+                        selectedCategory   = selectedCategory,
+                        totalSpending      = totalSpending,
+                        currentMonth       = currentMonth,
+                        dailyData          = dailyData,
+                        statsLoading       = statsLoading,
+                        onCategoryClick    = { cat -> selectedCategory = if (selectedCategory == cat) null else cat },
+                        onTransactionClick = { tx ->
+                            selectedTransactionDetailId = tx.id
+                            showTransactionDetailSheet = true
+                        }
+                    )
+                    1 -> TrendsTab(
+                        monthlyData  = monthlyData,
+                        dailyData    = dailyData,
+                        currentMonth = currentMonth,
+                        statsLoading = statsLoading
+                    )
+                    2 -> BudgetTab(
+                        budgetEnabled, { budgetEnabled = it },
+                        monthlyBudget, budgetUsedPercentage, remainingBudget, categories,
+                        onEditBudget = {
+                            editingBudget = monthlyBudget.toString()
+                            budgetSaveError = null
+                            showBudgetDialog = true
+                        }
+                    )
                 }
             }
         }
 
-        // ── Tab Row ───────────────────────────────────────────────────────────
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor   = Color.White,
-            contentColor     = Blue500,
-            divider          = { HorizontalDivider(color = Gray100) }
-        ) {
-            listOf("가계부", "동향 변화", "예산 관리").forEachIndexed { i, title ->
-                Tab(
-                    selected = selectedTab == i,
-                    onClick  = { selectedTab = i },
-                    text = {
-                        Text(
-                            title,
-                            color      = if (selectedTab == i) Blue500 else Gray400,
-                            fontWeight = if (selectedTab == i) FontWeight.SemiBold else FontWeight.Normal
-                        )
-                    }
-                )
-            }
-        }
-
-        // ── Tab Content ───────────────────────────────────────────────────────
-        Column(
+        UserStatsFeedbackHost(
+            store = store,
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 24.dp)
-        ) {
-            when (selectedTab) {
-                0 -> LedgerTab(
-                    categories         = categories,
-                    transactions       = transactions,
-                    selectedCategory   = selectedCategory,
-                    totalSpending      = totalSpending,
-                    currentMonth       = currentMonth,
-                    dailyData          = dailyData,
-                    statsLoading       = statsLoading,
-                    onCategoryClick    = { cat -> selectedCategory = if (selectedCategory == cat) null else cat },
-                    onTransactionClick = { tx ->
-                        selectedTransactionDetailId = tx.id
-                        showTransactionDetailSheet = true
-                    }
-                )
-                1 -> TrendsTab(
-                    monthlyData  = monthlyData,
-                    dailyData    = dailyData,
-                    currentMonth = currentMonth,
-                    statsLoading = statsLoading
-                )
-                2 -> BudgetTab(
-                    budgetEnabled, { budgetEnabled = it },
-                    monthlyBudget, budgetUsedPercentage, remainingBudget, categories,
-                    onEditBudget = {
-                        editingBudget = monthlyBudget.toString()
-                        budgetSaveError = null
-                        showBudgetDialog = true
-                    }
-                )
-            }
-        }
+                .align(Alignment.BottomCenter)
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
+        )
     }
 
     if (showBudgetDialog) {
