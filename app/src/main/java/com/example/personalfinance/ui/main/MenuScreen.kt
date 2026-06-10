@@ -152,10 +152,8 @@ fun MenuScreen(
             listOf(
                 "결제 알림 테스트" to onNotificationDebugClick,
                 "🎰 가챠 테스트" to { navController.navigate(com.example.personalfinance.navigation.Screen.GachaDebug.route) },
-                "🎨 캐릭터 레이어 테스트" to { navController.navigate(com.example.personalfinance.navigation.Screen.CharacterLayerTest.route) },
                 "권한 설정" to { navController.navigate(com.example.personalfinance.navigation.Screen.PermissionSettings.route) },
-                "내 프로필" to { navController.navigate(com.example.personalfinance.navigation.Screen.Profile.route) },
-                "앱 정보" to {}
+                "내 프로필" to { navController.navigate(com.example.personalfinance.navigation.Screen.Profile.route) }
             ).forEach { (label, onClick) ->
                 Row(
                     modifier = Modifier

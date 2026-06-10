@@ -35,7 +35,6 @@ import com.example.personalfinance.ui.main.GachaScreen
 import com.example.personalfinance.ui.main.InventoryScreen
 import com.example.personalfinance.ui.main.ShopScreen
 import com.example.personalfinance.ui.auth.LoginScreen
-import com.example.personalfinance.ui.main.CharacterLayerTestScreen
 import com.example.personalfinance.ui.main.FriendComparisonScreen
 import com.example.personalfinance.ui.main.FriendsScreen
 import com.example.personalfinance.ui.main.GachaDebugScreen
@@ -58,7 +57,6 @@ sealed class Screen(val route: String) {
         fun route(friendId: Long): String = "friends/$friendId/comparison"
     }
     object NotificationDebug : Screen("notification_debug")
-    object CharacterLayerTest : Screen("character_layer_test")
     object GachaDebug : Screen("gacha_debug")
     object PermissionSettings : Screen("permission_settings")
 }
@@ -270,7 +268,6 @@ fun AppNavigation(tokenManager: TokenManager) {
         composable(Screen.Gacha.route)                { GachaScreen(navController)                }
         composable(Screen.Inventory.route)            { InventoryScreen(navController)            }
         composable(Screen.Shop.route)                 { ShopScreen(navController)                 }
-        composable(Screen.CharacterLayerTest.route)   { CharacterLayerTestScreen(navController)   }
         composable(Screen.GachaDebug.route)           { GachaDebugScreen(navController)           }
         composable(Screen.PermissionSettings.route)   { PermissionSettingsScreen(navController)   }
     }
