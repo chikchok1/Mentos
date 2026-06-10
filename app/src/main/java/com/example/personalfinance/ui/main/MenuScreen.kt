@@ -51,6 +51,31 @@ fun MenuScreen(
     val currentJob = UserStatsCalculator.determineJob(userStats.categorySpending)
     val jobTitle   = UserStatsCalculator.jobTitle(currentJob)
 
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // ── 로그아웃 확인 다이얼로그 ──────────────────────────────────────────────
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("로그아웃", fontWeight = FontWeight.SemiBold) },
+            text  = { Text("로그아웃 하시겠어요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    onLogout()
+                }) {
+                    Text("로그아웃", color = Color(0xFFD32F2F), fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("취소", color = Gray500)
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -171,14 +196,14 @@ fun MenuScreen(
                 }
             }
 
-            // 로그아웃 버튼
+            // 로그아웃 버튼 — 클릭 시 확인 다이얼로그 표시
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp, bottom = 4.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color(0xFFFFF0F0))
-                    .clickable { onLogout() }
+                    .clickable { showLogoutDialog = true }
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
