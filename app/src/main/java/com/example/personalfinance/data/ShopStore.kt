@@ -22,6 +22,7 @@ class ShopStore private constructor(context: Context) {
 
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("shop_store", Context.MODE_PRIVATE)
+    private val tokenManager = TokenManager(appContext)
 
     // ── 코인 ──────────────────────────────────────────────────────────────────
     private val _coins = MutableStateFlow(prefs.getInt("coins", 1200))
@@ -94,7 +95,6 @@ class ShopStore private constructor(context: Context) {
         if (_coins.value < price) return PurchaseResult.InsufficientCoins
 
         return try {
-            val tokenManager = TokenManager(appContext)
             val api = ApiClient.getShopApi(appContext, tokenManager)
             val resp = api.purchaseItem(PurchaseItemRequest(itemId = itemId, price = price))
 
@@ -144,7 +144,6 @@ class ShopStore private constructor(context: Context) {
      */
     suspend fun restoreFromServer() {
         try {
-            val tokenManager = TokenManager(appContext)
             val api = ApiClient.getShopApi(appContext, tokenManager)
             val resp = api.getShopState()
             if (resp.isSuccessful) {

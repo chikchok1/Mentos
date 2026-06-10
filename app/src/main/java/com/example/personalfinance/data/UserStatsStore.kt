@@ -306,6 +306,7 @@ class UserStatsStore private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val prefs: SharedPreferences =
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val tokenManager = TokenManager(appContext)
 
     private val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -339,7 +340,6 @@ class UserStatsStore private constructor(context: Context) {
 
     suspend fun refreshProfile(): Boolean {
         return try {
-            val tokenManager = TokenManager(appContext)
             val api = ApiClient.getUserApi(appContext, tokenManager)
             val resp = api.getProfile()
             if (resp.isSuccessful) {
@@ -357,7 +357,6 @@ class UserStatsStore private constructor(context: Context) {
 
     suspend fun updateNicknameWithServer(nickname: String): Boolean {
         return try {
-            val tokenManager = TokenManager(appContext)
             val api = ApiClient.getUserApi(appContext, tokenManager)
             val resp = api.updateProfile(UpdateUserProfileRequest(nickname.trim()))
             if (resp.isSuccessful) {
@@ -380,7 +379,6 @@ class UserStatsStore private constructor(context: Context) {
      */
     suspend fun restoreFromServer() {
         try {
-            val tokenManager = TokenManager(appContext)
             val api = ApiClient.getTransactionApi(appContext, tokenManager)
 
             val resp = api.getAll()
@@ -454,7 +452,6 @@ class UserStatsStore private constructor(context: Context) {
 
     suspend fun refreshServerStats(): Boolean {
         return try {
-            val tokenManager = TokenManager(appContext)
             val api = ApiClient.getUserApi(appContext, tokenManager)
             val resp = api.getStats()
             if (!resp.isSuccessful) {
@@ -472,7 +469,6 @@ class UserStatsStore private constructor(context: Context) {
 
     suspend fun refreshPrivacy(): Boolean {
         return try {
-            val tokenManager = TokenManager(appContext)
             val api = ApiClient.getUserApi(appContext, tokenManager)
             val resp = api.getPrivacy()
             if (resp.isSuccessful) {
@@ -510,7 +506,6 @@ class UserStatsStore private constructor(context: Context) {
 
     private suspend fun updatePrivacy(settings: PrivacySettings): Boolean {
         return try {
-            val tokenManager = TokenManager(appContext)
             val api = ApiClient.getUserApi(appContext, tokenManager)
             val resp = api.updatePrivacy(
                 PrivacySettingsRequest(
@@ -534,7 +529,6 @@ class UserStatsStore private constructor(context: Context) {
     suspend fun updateMonthlyBudget(monthlyBudget: Long): Boolean {
         if (monthlyBudget <= 0L) return false
         return try {
-            val tokenManager = TokenManager(appContext)
             val api = ApiClient.getUserApi(appContext, tokenManager)
             val resp = api.updateBudget(UpdateBudgetRequest(monthlyBudget))
             if (resp.isSuccessful) {
@@ -686,7 +680,6 @@ class UserStatsStore private constructor(context: Context) {
 
         syncScope.launch {
             try {
-                val tokenManager = TokenManager(appContext)
                 val api = ApiClient.getTransactionApi(appContext, tokenManager)
                 val req = SaveTransactionRequest(
                     amount              = amount,
@@ -970,7 +963,6 @@ class UserStatsStore private constructor(context: Context) {
     ): String = "$source|$occurredAt|$amount|$merchantName|$category"
 
     private suspend fun syncCategoryUpdateWithRetry(transactionId: String, category: String) {
-        val tokenManager = TokenManager(appContext)
         val api = ApiClient.getTransactionApi(appContext, tokenManager)
         val req = UpdateCategoryByClientIdRequest(
             clientTransactionId = transactionId,
