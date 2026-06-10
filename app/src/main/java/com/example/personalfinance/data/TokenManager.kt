@@ -3,6 +3,9 @@ package com.example.personalfinance.data
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class TokenManager(context: Context) {
     private val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
@@ -53,5 +56,19 @@ class TokenManager(context: Context) {
 
     fun clearTokens() {
         sharedPreferences.edit().clear().apply()
+    }
+
+    // ── 토큰 만료 전용 (TokenAuthenticator에서만 호출) ──────────────────────────
+    // clearTokens(로그아웃)과 구분하기 위해 별도 함수로 분리
+    private val _tokenExpired = MutableStateFlow(false)
+    val tokenExpired: StateFlow<Boolean> = _tokenExpired.asStateFlow()
+
+    fun expireTokens() {
+        sharedPreferences.edit().clear().apply()
+        _tokenExpired.value = true
+    }
+
+    fun resetExpiredFlag() {
+        _tokenExpired.value = false
     }
 }

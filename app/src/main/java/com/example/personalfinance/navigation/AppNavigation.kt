@@ -4,6 +4,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,6 +87,22 @@ fun AppNavigation(tokenManager: TokenManager) {
     if (startDestination == null) {
         Box(modifier = Modifier.fillMaxSize())
         return
+    }
+
+    // ── 토큰 만료 감지 → 로그인 화면으로 강제 이동 ──────────────────────
+    // clearTokens(로그아웃)는 여기서 반응하지 않음 — MenuScreen onLogout이 직접 처리
+    val tokenExpired by tokenManager.tokenExpired.collectAsState()
+
+    LaunchedEffect(tokenExpired) {
+        if (tokenExpired) {
+            tokenManager.resetExpiredFlag()
+            UserStatsStore.getInstance(context).clearForLogout()
+            CharacterAppearanceStore.getInstance(context).clearForLogout()
+            ApiClient.reset()
+            navController.navigate(Screen.Login.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
     }
 
     NavHost(

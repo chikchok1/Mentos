@@ -14,35 +14,54 @@ class TokenAuthenticator(
 ) : Authenticator {
 
     override fun authenticate(route: Route?, response: Response): Request? {
-        val refreshToken = tokenManager.getRefreshToken() ?: return null
+        // 동시에 여러 요청이 401을 받으면 이 블록이 동시에 실행될 수 있음 → synchronized로 직렬화
+        synchronized(this) {
+            // 이미 다른 스레드가 토큰을 갱신했는지 확인
+            // 현재 저장된 토큰과 실패한 요청의 토큰이 다르면 → 이미 갱신된 것이므로 새 토큰으로 재시도
+            val currentToken = tokenManager.getAccessToken()
+            val requestToken = response.request.header("Authorization")
+                ?.removePrefix("Bearer ")
 
-        // 동기적으로 새로운 토큰을 발급받는 API 호출
-        val call = authApiProvider().refreshToken(RefreshTokenRequest(refreshToken))
-        
-        try {
-            val refreshResponse = call.execute()
-            if (refreshResponse.isSuccessful) {
-                val newTokens = refreshResponse.body()
-                if (newTokens != null) {
-                    // 서버로부터 새 Access Token을 정상적으로 받았다면 로컬에 저장
-                    tokenManager.saveTokens(newTokens.accessToken, newTokens.refreshToken)
-
-                    // 원래 실패했던 요청의 헤더만 새 토큰으로 교체하여 재시도
-                    return response.request.newBuilder()
-                        .header("Authorization", "Bearer ${newTokens.accessToken}")
-                        .build()
-                }
+            if (currentToken != null && currentToken != requestToken) {
+                return response.request.newBuilder()
+                    .header("Authorization", "Bearer $currentToken")
+                    .build()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+
+            // Refresh Token이 없으면 복구 불가 → 만료 처리
+            val refreshToken = tokenManager.getRefreshToken() ?: run {
+                tokenManager.expireTokens()
+                return null
+            }
+
+            return try {
+                val refreshResponse = authApiProvider()
+                    .refreshToken(RefreshTokenRequest(refreshToken))
+                    .execute()
+
+                if (refreshResponse.isSuccessful) {
+                    val newTokens = refreshResponse.body()
+                    if (newTokens != null) {
+                        // 갱신 성공 → 새 토큰 저장 후 원래 요청 재시도
+                        tokenManager.saveTokens(newTokens.accessToken, newTokens.refreshToken)
+                        response.request.newBuilder()
+                            .header("Authorization", "Bearer ${newTokens.accessToken}")
+                            .build()
+                    } else {
+                        // 응답은 왔는데 바디가 없는 경우 → 만료 처리
+                        tokenManager.expireTokens()
+                        null
+                    }
+                } else {
+                    // Refresh Token 자체가 만료되거나 서버에서 거부한 경우 → 만료 처리
+                    tokenManager.expireTokens()
+                    null
+                }
+            } catch (e: Exception) {
+                // 네트워크 오류(오프라인 등) → 만료로 간주하지 않음, 그냥 요청 실패 처리
+                e.printStackTrace()
+                null
+            }
         }
-
-        // Refresh Token도 만료되거나 검증에 실패한 경우
-        // 로컬 토큰 완전 삭제
-        tokenManager.clearTokens() 
-
-        // UI navigation should be handled by the UI layer after it observes the cleared token state.
-
-        return null
     }
 }
