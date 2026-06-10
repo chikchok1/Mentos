@@ -33,6 +33,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,6 +86,7 @@ import com.example.personalfinance.ui.theme.Purple50
 import com.example.personalfinance.ui.theme.RedDanger
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FriendsScreen(navController: NavController) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -100,8 +102,17 @@ fun FriendsScreen(navController: NavController) {
 
     var keyword by remember { mutableStateOf("") }
 
+    // 진입 시 전체 1회 로드
     LaunchedEffect(Unit) {
         store.refreshAll()
+    }
+
+    // 화면 열려있는 동안 받은 요청만 3초마다 폴링
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(3_000)
+            store.refreshReceivedOnly()
+        }
     }
 
     Column(
@@ -182,11 +193,13 @@ fun FriendsScreen(navController: NavController) {
                 }
             }
 
+            val pendingSentRequests = sentRequests.filter { it.status == "PENDING" }
+
             SectionTitle("보낸 요청")
-            if (sentRequests.isEmpty()) {
+            if (pendingSentRequests.isEmpty()) {
                 EmptyText("보낸 친구 요청이 없습니다.")
             } else {
-                sentRequests.take(5).forEach { request ->
+                pendingSentRequests.take(5).forEach { request ->
                     RequestCard(
                         request = request,
                         received = false,
@@ -656,19 +669,5 @@ private fun displayName(
     val emailPrefix = cleanEmail?.substringBefore("@")?.takeIf { it.isNotBlank() }
     return emailPrefix ?: cleanEmail ?: id?.let { "User $it" } ?: "User"
 }
-
-/*
-private fun displayName(nickname: String?, email: String?, id: Long?): String =
-    nickname?.takeIf { it.isNotBlank() }
-        ?: email?.takeIf { it.isNotBlank() }
-        ?: id?.let { "사용자 #$it" }
-        ?: "사용자"
-
-private fun formatWon(amount: Long): String = "${String.format("%,d", amount)}원"
-*/
-/*
-
-private fun formatWon(amount: Long): String = "${String.format("%,d", amount)}원"
-*/
 
 private fun formatWon(amount: Long): String = "${String.format("%,d", amount)} KRW"

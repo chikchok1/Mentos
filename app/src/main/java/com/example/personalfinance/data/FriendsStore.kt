@@ -48,6 +48,11 @@ class FriendsStore private constructor(context: Context) {
         }
     }
 
+    // 화면 폴링용 — 받은 요청만 조용히 갱신, isLoading 토글 안 함
+    suspend fun refreshReceivedOnly() {
+        safeRefresh("받은 요청을 새로고침하지 못했습니다.") { refreshReceived() }
+    }
+
     suspend fun search(keyword: String) {
         val trimmed = keyword.trim()
         if (trimmed.isBlank()) {
