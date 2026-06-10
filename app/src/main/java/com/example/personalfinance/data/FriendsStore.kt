@@ -37,6 +37,9 @@ class FriendsStore private constructor(context: Context) {
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    // 마지막 검색어 기억 — 폴링 시 검색결과 상태도 갱신하기 위해
+    private var lastKeyword: String = ""
+
     suspend fun refreshAll() {
         _isLoading.value = true
         try {
@@ -48,25 +51,36 @@ class FriendsStore private constructor(context: Context) {
         }
     }
 
-    // 화면 폴링용 — 받은 요청만 조용히 갱신, isLoading 토글 안 함
-    suspend fun refreshReceivedOnly() {
+    // 화면 폴링용 — 받은 요청 + 보낸 요청 + 친구 목록 + 검색결과 조용히 갱신, isLoading 토글 안 함
+    suspend fun refreshRequestsAndFriends() {
         safeRefresh("받은 요청을 새로고침하지 못했습니다.") { refreshReceived() }
+        safeRefresh("보낸 요청을 새로고침하지 못했습니다.") { refreshSent() }
+        safeRefresh("친구 목록을 새로고침하지 못했습니다.") { refreshFriends() }
+        if (lastKeyword.isNotBlank()) {
+            safeRefresh("검색 결과를 새로고침하지 못했습니다.") { doSearch(lastKeyword) }
+        }
     }
 
     suspend fun search(keyword: String) {
         val trimmed = keyword.trim()
         if (trimmed.isBlank()) {
             _searchResults.value = emptyList()
+            lastKeyword = ""
             return
         }
         runApi("친구 검색 실패") {
-            val api = ApiClient.getFriendApi(appContext, TokenManager(appContext))
-            val response = api.search(trimmed)
-            if (response.isSuccessful) {
-                _searchResults.value = response.body().orEmpty()
-            } else {
-                fail(response.code(), "친구 검색 실패")
-            }
+            doSearch(trimmed)
+            lastKeyword = trimmed
+        }
+    }
+
+    private suspend fun doSearch(keyword: String) {
+        val api = ApiClient.getFriendApi(appContext, TokenManager(appContext))
+        val response = api.search(keyword)
+        if (response.isSuccessful) {
+            _searchResults.value = response.body().orEmpty()
+        } else {
+            fail(response.code(), "친구 검색 실패")
         }
     }
 
@@ -77,6 +91,9 @@ class FriendsStore private constructor(context: Context) {
             if (response.isSuccessful) {
                 _message.value = "친구 요청을 보냈습니다."
                 safeRefresh("보낸 요청을 새로고침하지 못했습니다.") { refreshSent() }
+                if (lastKeyword.isNotBlank()) {
+                    safeRefresh("검색 결과를 새로고침하지 못했습니다.") { doSearch(lastKeyword) }
+                }
             } else {
                 fail(response.code(), "친구 요청 실패")
             }
@@ -117,6 +134,9 @@ class FriendsStore private constructor(context: Context) {
             if (response.isSuccessful) {
                 _message.value = "친구를 삭제했습니다."
                 safeRefresh("친구 목록을 새로고침하지 못했습니다.") { refreshFriends() }
+                if (lastKeyword.isNotBlank()) {
+                    safeRefresh("검색 결과를 새로고침하지 못했습니다.") { doSearch(lastKeyword) }
+                }
             } else {
                 fail(response.code(), "친구 삭제 실패")
             }

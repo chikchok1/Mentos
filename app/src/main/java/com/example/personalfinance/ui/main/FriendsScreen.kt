@@ -107,12 +107,19 @@ fun FriendsScreen(navController: NavController) {
         store.refreshAll()
     }
 
-    // 화면 열려있는 동안 받은 요청만 3초마다 폴링
+    // 화면 열려있는 동안 3초마다 폴링 — 받은 요청/보낸 요청/친구 목록/검색결과 갱신
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(3_000)
-            store.refreshReceivedOnly()
+            store.refreshRequestsAndFriends()
         }
+    }
+
+    // 메시지 표시 후 3초 뒤 자동 소거 (null 전환 시엔 실행 안 함)
+    LaunchedEffect(message) {
+        val current = message ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(3_000)
+        if (store.message.value == current) store.clearMessage()
     }
 
     Column(
@@ -139,7 +146,7 @@ fun FriendsScreen(navController: NavController) {
                 onClick = { scope.launch { store.search(keyword) } },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(14.dp),
-                enabled = keyword.isNotBlank()
+                enabled = keyword.trim().length >= 2  // 최소 2글자 이상
             ) {
                 Icon(Icons.Rounded.Search, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -147,8 +154,9 @@ fun FriendsScreen(navController: NavController) {
             }
 
             message?.let {
+                val isSuccess = it.contains("보냈습니다") || it.contains("수락") || it.contains("삭제") || it.contains("등록")
                 Spacer(Modifier.height(10.dp))
-                Text(it, color = RedDanger, style = MaterialTheme.typography.bodySmall)
+                Text(it, color = if (isSuccess) GreenSuccess else RedDanger, style = MaterialTheme.typography.bodySmall)
             }
 
             if (isLoading) {
