@@ -41,6 +41,9 @@ fun HomeScreen(navController: NavController) {
     val userStats by store.statsFlow.collectAsState()
     val nickname  by store.nicknameFlow.collectAsState()
 
+    // 서버 통계를 받아오기 전까지 로컬 캐시 레벨을 보여주다가
+    // refreshServerStats() 완료 후 서버 기준 레벨로 자동 업데이트됨
+    // (statsFlow가 applyServerStats에서 갱신되므로 별도 상태 불필요)
     LaunchedEffect(Unit) {
         store.refreshServerStats()
     }

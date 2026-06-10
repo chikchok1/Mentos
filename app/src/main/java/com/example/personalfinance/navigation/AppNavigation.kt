@@ -75,10 +75,13 @@ fun AppNavigation(tokenManager: TokenManager) {
         startDestination = if (token != null) Screen.Home.route else Screen.Login.route
         Log.i(TAG, "App start auth state: hasAccessToken=${token != null}, startDestination=$startDestination")
         if (token != null) {
-            // 앱 재시작 시(토큰 있음) 서버에서 거래 내역 복원
+            // 앱 재시작 시(토큰 있음) 서버 데이터 복원
+            // restoreFromServer: 거래 내역 기반 로컬 계산 레벨 적용
+            // refreshServerStats: 서버 기준 레벨로 덮어씀 → 홈/프로필 레벨 일치
             withContext(Dispatchers.IO) {
                 UserStatsStore.getInstance(context).refreshProfile()
                 UserStatsStore.getInstance(context).restoreFromServer()
+                UserStatsStore.getInstance(context).refreshServerStats()
                 CharacterAppearanceStore.getInstance(context).restoreFromServer()
             }
         }
