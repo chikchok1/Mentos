@@ -7,6 +7,7 @@ import com.example.personalfinance.network.ApiClient
 import com.example.personalfinance.network.PrivacySettingsRequest
 import com.example.personalfinance.network.PrivacySettingsResponse
 import com.example.personalfinance.network.SaveTransactionRequest
+import com.example.personalfinance.network.UpdateTransactionByClientIdRequest
 import com.example.personalfinance.network.UpdateCategoryByClientIdRequest
 import com.example.personalfinance.network.UpdateBudgetRequest
 import com.example.personalfinance.network.UpdateUserProfileRequest
@@ -729,21 +730,40 @@ class UserStatsStore private constructor(context: Context) {
         return true
     }
 
-    fun updateTransactionCategory(transactionId: String, newCategory: String): Boolean {
-        val normalizedCategory = if (newCategory in ExpenseCategoryClassifier.categories) {
-            newCategory
-        } else {
-            ExpenseCategoryClassifier.CATEGORY_OTHER
-        }
-
+    /**
+     * 가맹점명과 카테고리를 함께 또는 개별로 수정·서버 동기화
+     *
+     * @param transactionId  clientTransactionId
+     * @param newMerchantName  null이면 처리 안 함
+     * @param newCategory      null이면 처리 안 함
+     * @return 변경이 있으면 true, 변경할 내용 없으면 false
+     */
+    fun updateTransactionFields(
+        transactionId: String,
+        newMerchantName: String?,
+        newCategory: String?
+    ): Boolean {
         val currentTransactions = _transactionsFlow.value
         val index = currentTransactions.indexOfFirst { it.id == transactionId }
         if (index == -1) return false
 
         val oldTx = currentTransactions[index]
-        if (oldTx.category == normalizedCategory) return false
 
-        val newTx = oldTx.copy(category = normalizedCategory)
+        val resolvedMerchant = newMerchantName?.takeIf { it.isNotBlank() }
+        val resolvedCategory = newCategory
+            ?.takeIf { it.isNotBlank() }
+            ?.let { if (it in ExpenseCategoryClassifier.categories) it else ExpenseCategoryClassifier.CATEGORY_OTHER }
+
+        // 변경할 내용이 없으면 듐도 없음
+        if (resolvedMerchant == null && resolvedCategory == null) return false
+        if (resolvedMerchant == oldTx.store && resolvedCategory == null) return false
+        if (resolvedMerchant == null && resolvedCategory == oldTx.category) return false
+        if (resolvedMerchant == oldTx.store && resolvedCategory == oldTx.category) return false
+
+        val newTx = oldTx.copy(
+            store    = resolvedMerchant ?: oldTx.store,
+            category = resolvedCategory ?: oldTx.category
+        )
         val newTransactions = currentTransactions.toMutableList()
         newTransactions[index] = newTx
 
@@ -761,25 +781,34 @@ class UserStatsStore private constructor(context: Context) {
             }
 
         val newJob = UserStatsCalculator.determineJob(newCategorySpending)
-
-        val newStats = current.copy(
-            job = newJob,
-            jobReason = UserStatsCalculator.jobReason(newJob, newCategorySpending, newSpending),
-            jobMonth = YearMonth.now().toString(),
-            thisMonthSpending = newSpending,
-            categorySpending = newCategorySpending,
-            transactions = newTransactions
-        )
+        val newStats = if (resolvedCategory != null) {
+            // 카테고리 변경 시에만 직업에 영향
+            current.copy(
+                job               = newJob,
+                jobReason         = UserStatsCalculator.jobReason(newJob, newCategorySpending, newSpending),
+                jobMonth          = YearMonth.now().toString(),
+                thisMonthSpending = newSpending,
+                categorySpending  = newCategorySpending,
+                transactions      = newTransactions
+            )
+        } else {
+            current.copy(transactions = newTransactions)
+        }
 
         saveStats(newStats, newTransactions)
-        enqueueFeedback(buildFeedbackEvents(previous = current, current = newStats))
+        if (resolvedCategory != null) {
+            enqueueFeedback(buildFeedbackEvents(previous = current, current = newStats))
+        }
 
         syncScope.launch {
-            syncCategoryUpdateWithRetry(transactionId, normalizedCategory)
+            syncFieldsUpdateWithRetry(transactionId, resolvedMerchant, resolvedCategory)
         }
 
         return true
     }
+
+    fun updateTransactionCategory(transactionId: String, newCategory: String): Boolean =
+        updateTransactionFields(transactionId, newMerchantName = null, newCategory = newCategory)
 
     fun clearForLogout() {
         prefs.edit().clear().apply()
@@ -1018,6 +1047,40 @@ class UserStatsStore private constructor(context: Context) {
         }
 
         Log.w(TAG, "카테고리 서버 동기화 재시도 보류 필요: clientId=$transactionId")
+    }
+
+    private suspend fun syncFieldsUpdateWithRetry(
+        transactionId: String,
+        merchantName: String?,
+        category: String?
+    ) {
+        if (merchantName == null && category == null) return
+        val api = ApiClient.getTransactionApi(appContext, tokenManager)
+        val req = UpdateTransactionByClientIdRequest(
+            clientTransactionId = transactionId,
+            merchantName        = merchantName,
+            category            = category
+        )
+        val retryDelaysMs = longArrayOf(1_000L, 3_000L, 5_000L)
+
+        repeat(retryDelaysMs.size) { attempt ->
+            try {
+                val resp = api.updateByClientId(req)
+                if (resp.isSuccessful) {
+                    Log.d(TAG, "가맹점명/카테고리 서버 동기화 완료: clientId=$transactionId")
+                    return
+                }
+                Log.w(TAG, "가맹점명/카테고리 서버 동기화 실패 attempt=${attempt + 1} (HTTP ${resp.code()}): clientId=$transactionId")
+            } catch (e: Exception) {
+                Log.w(TAG, "가맹점명/카테고리 서버 동기화 예외 attempt=${attempt + 1}: ${e.message}")
+            }
+
+            if (attempt < retryDelaysMs.lastIndex) {
+                delay(retryDelaysMs[attempt])
+            }
+        }
+
+        Log.w(TAG, "가맹점명/카테고리 서버 동기화 재시도 보류 필요: clientId=$transactionId")
     }
 
     companion object {

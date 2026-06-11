@@ -563,7 +563,7 @@ fun LedgerScreen(navController: NavController) {
                         colors = ButtonDefaults.buttonColors(containerColor = Blue500),
                         elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
                     ) {
-                        Text("카테고리 수정", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color.White)
+                        Text("수정하기", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color.White)
                     }
                     TextButton(
                         onClick = {
@@ -580,16 +580,26 @@ fun LedgerScreen(navController: NavController) {
         }
     }
 
-    // ── Category Edit Bottom Sheet ───────────────────────────────────────────
+    // ── Category / MerchantName Edit Bottom Sheet ──────────────────────────────
     if (showCategoryEditSheet && selectedTransactionForEdit != null) {
+        val editTx = selectedTransactionForEdit!!
+        var editingMerchantName by remember(editTx.id) {
+            mutableStateOf(displayMerchantName(editTx.store))
+        }
+        var selectedCategoryInSheet by remember(editTx.id) {
+            mutableStateOf(editTx.category)
+        }
+        var isSaving by remember(editTx.id) { mutableStateOf(false) }
+        var saveError by remember(editTx.id) { mutableStateOf<String?>(null) }
+
         ModalBottomSheet(
             onDismissRequest = {
                 showCategoryEditSheet = false
                 reopenDetailAfterCategoryEdit = false
             },
-            sheetState       = sheetState,
-            containerColor   = Color.White,
-            shape            = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            sheetState     = sheetState,
+            containerColor = Color.White,
+            shape          = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -598,19 +608,44 @@ fun LedgerScreen(navController: NavController) {
                     .padding(bottom = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("카테고리 수정", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Gray600)
-                Spacer(Modifier.height(8.dp))
-                Text("${selectedTransactionForEdit?.let { displayMerchantName(it.store) }}의 카테고리를 선택하세요",
-                    style = MaterialTheme.typography.bodyMedium, color = Gray500)
-                Spacer(Modifier.height(24.dp))
+                Text(
+                    "가맹점명 / 카테고리 수정",
+                    style      = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color      = Gray600
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "가맹점명을 수정하고 카테고리를 선택하세요",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Gray500
+                )
+                Spacer(Modifier.height(20.dp))
 
+                // ── 가맹점명 입력 ─────────────────────────────────────────────
+                OutlinedTextField(
+                    value         = editingMerchantName,
+                    onValueChange = { editingMerchantName = it; saveError = null },
+                    label         = { Text("가맹점명") },
+                    placeholder   = { Text("예: AliExpress") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth(),
+                    shape         = RoundedCornerShape(14.dp),
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Blue500,
+                        focusedLabelColor  = Blue500
+                    )
+                )
+                Spacer(Modifier.height(20.dp))
+
+                // ── 카테고리 선택 그리드 ──────────────────────────────────────
                 ExpenseCategoryClassifier.categories.chunked(3).forEach { row ->
                     Row(
-                        modifier              = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        modifier              = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         row.forEach { cat ->
-                            val isSelected = cat == selectedTransactionForEdit?.category
+                            val isSelected = cat == selectedCategoryInSheet
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -621,37 +656,82 @@ fun LedgerScreen(navController: NavController) {
                                         color = if (isSelected) Blue400 else Gray100,
                                         shape = RoundedCornerShape(16.dp)
                                     )
-                                    .clickable {
-                                        selectedTransactionForEdit?.let { tx ->
-                                            store.updateTransactionCategory(tx.id, cat)
-                                            selectedTransactionDetailId = tx.id
-                                        }
-                                        scope.launch { sheetState.hide() }.invokeOnCompletion {
-                                            if (!sheetState.isVisible) {
-                                                showCategoryEditSheet = false
-                                                if (reopenDetailAfterCategoryEdit) {
-                                                    reopenDetailAfterCategoryEdit = false
-                                                    showTransactionDetailSheet = true
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .padding(vertical = 16.dp),
+                                    .clickable { selectedCategoryInSheet = cat }
+                                    .padding(vertical = 14.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(categoryEmojiForClassifier(cat), fontSize = 28.sp)
-                                    Spacer(Modifier.height(8.dp))
+                                    Text(categoryEmojiForClassifier(cat), fontSize = 24.sp)
+                                    Spacer(Modifier.height(6.dp))
                                     Text(
                                         cat,
-                                        style      = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        style      = MaterialTheme.typography.bodySmall,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         color      = if (isSelected) Blue500 else Gray600
                                     )
                                 }
                             }
                         }
                         repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+
+                // ── 오류 메시지 ───────────────────────────────────────────────
+                saveError?.let { msg ->
+                    Text(
+                        msg,
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = RedDanger,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
+                // ── 저장 버튼 ─────────────────────────────────────────────────
+                val merchantChanged = editingMerchantName.trim() != displayMerchantName(editTx.store)
+                val categoryChanged = selectedCategoryInSheet != editTx.category
+                val hasAnyChange    = (merchantChanged || categoryChanged) && !isSaving
+
+                Button(
+                    onClick = {
+                        if (!hasAnyChange) return@Button
+                        isSaving  = true
+                        saveError = null
+                        val newMerchant = editingMerchantName.trim().takeIf { merchantChanged }
+                        val newCategory = selectedCategoryInSheet.takeIf { categoryChanged }
+                        val ok = store.updateTransactionFields(editTx.id, newMerchant, newCategory)
+                        isSaving = false
+                        if (ok) {
+                            selectedTransactionDetailId = editTx.id
+                            scope.launch { sheetState.hide() }.invokeOnCompletion {
+                                if (!sheetState.isVisible) {
+                                    showCategoryEditSheet = false
+                                    if (reopenDetailAfterCategoryEdit) {
+                                        reopenDetailAfterCategoryEdit = false
+                                        showTransactionDetailSheet = true
+                                    }
+                                }
+                            }
+                        } else {
+                            saveError = "수정에 실패했습니다. 다시 시도해주세요."
+                        }
+                    },
+                    modifier  = Modifier.fillMaxWidth().height(52.dp),
+                    shape     = RoundedCornerShape(14.dp),
+                    colors    = ButtonDefaults.buttonColors(
+                        containerColor         = if (hasAnyChange) Blue500 else Gray200,
+                        disabledContainerColor = Gray200
+                    ),
+                    enabled   = hasAnyChange,
+                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier    = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color       = Color.White
+                        )
+                    } else {
+                        Text("저장", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color.White)
                     }
                 }
             }

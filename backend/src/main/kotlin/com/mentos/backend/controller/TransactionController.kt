@@ -101,6 +101,34 @@ class TransactionController(
         }
     }
 
+    // ── 가맹점명 + 카테고리 통합 수정 (clientTransactionId 기준) ────────────────
+
+    /**
+     * PATCH /api/transactions/by-client
+     * Body: { clientTransactionId, merchantName?, category? }
+     * merchantName 또는 category 중 하나 이상 있으면 수정. 둘 다 null이면 무시.
+     */
+    @PatchMapping("/by-client")
+    fun updateByClientId(
+        @RequestHeader("Authorization") authHeader: String?,
+        @RequestBody req: UpdateTransactionByClientIdRequest
+    ): ResponseEntity<Any> {
+        val userId = resolveUserId(authHeader)
+            ?: return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
+
+        return try {
+            ResponseEntity.ok(
+                transactionService.updateByClientId(userId, req.clientTransactionId, req.merchantName, req.category)
+            )
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(404).body(mapOf("error" to (e.message ?: "거래 내역을 찾을 수 없습니다.")))
+        } catch (e: IllegalAccessException) {
+            ResponseEntity.status(403).body(mapOf("error" to (e.message ?: "접근 권한이 없습니다.")))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "수정 중 오류가 발생했습니다.")))
+        }
+    }
+
     // ── 카테고리 수정 (clientTransactionId 기준) — 앱 연동 전용 ──────────────────
 
     /**

@@ -138,6 +138,38 @@ class TransactionService(
         return saved.toResponse()
     }
 
+    // ── 가맹점명·카테고리 통합 수정 (clientTransactionId 기준) ─────────────────
+
+    @Transactional
+    fun updateByClientId(
+        userId: Long,
+        clientTransactionId: String,
+        newMerchantName: String?,
+        newCategory: String?
+    ): TransactionResponse {
+        val tx = transactionRepository.findByUserIdAndClientTransactionId(userId, clientTransactionId)
+            .orElseThrow { NoSuchElementException("거래 내역을 찾을 수 없습니다. clientId=$clientTransactionId") }
+
+        var changed = false
+        if (!newMerchantName.isNullOrBlank()) {
+            tx.merchantName = newMerchantName.trim()
+            changed = true
+        }
+        if (!newCategory.isNullOrBlank()) {
+            tx.category = newCategory.trim()
+            changed = true
+        }
+
+        if (!changed) return tx.toResponse()
+
+        val saved = transactionRepository.save(tx)
+        // merchantName 만 변경된 경우 XP/레벨에 영향 없도록 카테고리 변경이 있을 때만 재계산
+        if (!newCategory.isNullOrBlank()) {
+            userStatsService.recalculate(userId)
+        }
+        return saved.toResponse()
+    }
+
     // ── 카테고리 수정 (clientTransactionId 기준) — 앱 연동용 ──────────────────
 
     @Transactional

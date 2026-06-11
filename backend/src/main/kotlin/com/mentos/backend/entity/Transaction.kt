@@ -29,7 +29,7 @@ class Transaction(
     val amount: Long,
 
     @Column(nullable = false)
-    val merchantName: String,
+    var merchantName: String,
 
     @Column(nullable = false)
     var category: String,

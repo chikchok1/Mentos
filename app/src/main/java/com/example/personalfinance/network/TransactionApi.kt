@@ -22,6 +22,16 @@ data class UpdateCategoryByClientIdRequest(
     val category: String
 )
 
+/**
+ * PATCH /api/transactions/by-client
+ * 가맹점명 + 카테고리 통합 수정. null 필드는 변경하지 않음.
+ */
+data class UpdateTransactionByClientIdRequest(
+    val clientTransactionId: String,
+    val merchantName: String? = null,
+    val category: String? = null
+)
+
 // ── 응답 ──────────────────────────────────────────────────────────────────────
 
 data class TransactionResponse(
@@ -70,6 +80,12 @@ interface TransactionApi {
     @PATCH("api/transactions/by-client/category")
     suspend fun updateCategoryByClientId(
         @Body req: UpdateCategoryByClientIdRequest
+    ): Response<TransactionResponse>
+
+    /** 가맹점명·카테고리 통합 수정 — clientTransactionId 기준 */
+    @PATCH("api/transactions/by-client")
+    suspend fun updateByClientId(
+        @Body req: UpdateTransactionByClientIdRequest
     ): Response<TransactionResponse>
 
     /** 월별 통계 */
