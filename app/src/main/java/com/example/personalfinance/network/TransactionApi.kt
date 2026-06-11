@@ -32,6 +32,10 @@ data class UpdateTransactionByClientIdRequest(
     val category: String? = null
 )
 
+data class DeleteTransactionByClientIdRequest(
+    val clientTransactionId: String
+)
+
 // ── 응답 ──────────────────────────────────────────────────────────────────────
 
 data class TransactionResponse(
@@ -87,6 +91,12 @@ interface TransactionApi {
     suspend fun updateByClientId(
         @Body req: UpdateTransactionByClientIdRequest
     ): Response<TransactionResponse>
+
+    /** 거래 삭제 — clientTransactionId 기준 */
+    @HTTP(method = "DELETE", path = "api/transactions/by-client", hasBody = true)
+    suspend fun deleteByClientId(
+        @Body req: DeleteTransactionByClientIdRequest
+    ): Response<Unit>
 
     /** 월별 통계 */
     @GET("api/transactions/stats")

@@ -1,5 +1,6 @@
 package com.example.personalfinance.ui.main
 
+import android.widget.Toast
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -246,6 +247,7 @@ fun LedgerScreen(navController: NavController) {
     // ── 서버 stats 상태 ───────────────────────────────────────────────────────
     var serverStats      by remember { mutableStateOf<MonthlyStatsResponse?>(null) }
     var statsLoading     by remember { mutableStateOf(false) }
+    var statsRefreshNonce by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         store.refreshServerStats()
@@ -253,7 +255,7 @@ fun LedgerScreen(navController: NavController) {
 
     // 월이 바뀔 때마다 서버에서 dailyBreakdown 조회
     // statsLoading은 헤더 스피너용 — UI는 로컬 데이터를 즉시 표시하고 서버 응답으로 업데이트
-    LaunchedEffect(currentMonth) {
+    LaunchedEffect(currentMonth, statsRefreshNonce) {
         statsLoading = true
         serverStats  = null
         try {
@@ -545,6 +547,9 @@ fun LedgerScreen(navController: NavController) {
                 HorizontalDivider(color = Gray100, modifier = Modifier.padding(top = 4.dp))
 
                 // ── 버튼 ────────────────────────────────────────────────────
+                var showDeleteConfirm by remember { mutableStateOf(false) }
+                var isDeleting by remember(detailTx.id) { mutableStateOf(false) }
+
                 Column(
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -565,6 +570,17 @@ fun LedgerScreen(navController: NavController) {
                     ) {
                         Text("수정하기", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color.White)
                     }
+                    OutlinedButton(
+                        onClick = { showDeleteConfirm = true },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = RedDanger),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, RedDanger.copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Rounded.Delete, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("삭제하기", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    }
                     TextButton(
                         onClick = {
                             showTransactionDetailSheet = false
@@ -575,6 +591,64 @@ fun LedgerScreen(navController: NavController) {
                     ) {
                         Text("닫기", fontWeight = FontWeight.Medium, fontSize = 15.sp, color = Gray400)
                     }
+                }
+
+                if (showDeleteConfirm) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            if (!isDeleting) showDeleteConfirm = false
+                        },
+                        title = { Text("소비 내역을 삭제할까요?", fontWeight = FontWeight.SemiBold) },
+                        text = {
+                            Text(
+                                "'${displayMerchantName(detailTx.store)}' ${formatWon(detailTx.amount)} 내역을 삭제합니다.\n삭제한 내역은 되돌릴 수 없어요.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Gray600
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                enabled = !isDeleting,
+                                onClick = {
+                                    scope.launch {
+                                        isDeleting = true
+                                        val deleted = store.deleteTransaction(detailTx.id)
+                                        isDeleting = false
+
+                                        if (deleted) {
+                                            showDeleteConfirm = false
+                                            serverStats = null
+                                            statsRefreshNonce += 1
+                                            detailSheetState.hide()
+                                            showTransactionDetailSheet = false
+                                            selectedTransactionDetailId = null
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                "삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text(
+                                    if (isDeleting) "삭제 중..." else "삭제",
+                                    color = RedDanger,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                enabled = !isDeleting,
+                                onClick = { showDeleteConfirm = false }
+                            ) {
+                                Text("취소", color = Gray500)
+                            }
+                        },
+                        shape = RoundedCornerShape(20.dp)
+                    )
                 }
             }
         }

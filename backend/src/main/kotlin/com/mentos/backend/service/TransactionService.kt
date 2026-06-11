@@ -187,6 +187,15 @@ class TransactionService(
         return saved.toResponse()
     }
 
+    @Transactional
+    fun deleteByClientId(userId: Long, clientTransactionId: String) {
+        val tx = transactionRepository.findByUserIdAndClientTransactionId(userId, clientTransactionId)
+            .orElseThrow { NoSuchElementException("거래 내역을 찾을 수 없습니다. clientId=$clientTransactionId") }
+
+        transactionRepository.delete(tx)
+        userStatsService.recalculate(userId)
+    }
+
     // ── 내부 헬퍼 ────────────────────────────────────────────────────────────
 
     private fun monthRange(year: Int, month: Int): Pair<LocalDateTime, LocalDateTime> {

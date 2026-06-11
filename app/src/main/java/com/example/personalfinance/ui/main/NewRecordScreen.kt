@@ -72,109 +72,120 @@ fun NewRecordScreen(navController: NavController) {
             Spacer(Modifier.width(48.dp))
         }
 
-        // ── Amount Display ────────────────────────────────────────────────────
-        Box(
-            modifier         = Modifier
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color.White, Gray50)))
-                .padding(vertical = 40.dp),
-            contentAlignment = Alignment.Center
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
         ) {
-            AnimatedContent(
-                targetState  = displayAmount,
-                transitionSpec = {
-                    scaleIn(initialScale = 1.08f) + fadeIn() togetherWith
-                    scaleOut(targetScale = 0.95f) + fadeOut()
-                },
-                label = "amount"
-            ) { target ->
-                Text(
-                    text       = target,
-                    style      = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    fontSize   = 42.sp
-                )
+            // ── Amount Display ────────────────────────────────────────────────
+            Box(
+                modifier         = Modifier
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color.White, Gray50)))
+                    .padding(vertical = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                AnimatedContent(
+                    targetState  = displayAmount,
+                    transitionSpec = {
+                        scaleIn(initialScale = 1.08f) + fadeIn() togetherWith
+                        scaleOut(targetScale = 0.95f) + fadeOut()
+                    },
+                    label = "amount"
+                ) { target ->
+                    Text(
+                        text       = target,
+                        style      = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 42.sp
+                    )
+                }
             }
-        }
 
-        // ── Category Grid ─────────────────────────────────────────────────────
-        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-            Text(
-                "카테고리",
-                style      = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color      = Gray600,
-                modifier   = Modifier.padding(bottom = 14.dp)
-            )
-            categories.chunked(3).forEach { row ->
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    row.forEach { cat ->
-                        val isSelected = selectedCategory == cat.id
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(16.dp))
-                                .then(
-                                    if (isSelected) Modifier
-                                        .shadow(4.dp, RoundedCornerShape(16.dp))
-                                        .background(
-                                            Brush.linearGradient(listOf(Blue50, Purple50)),
-                                            RoundedCornerShape(16.dp)
-                                        )
-                                        .border(1.5.dp, Blue400.copy(0.4f), RoundedCornerShape(16.dp))
-                                    else Modifier.background(Gray50)
-                                )
-                                .clickable { selectedCategory = cat.id }
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(
-                                    modifier         = Modifier.size(54.dp).background(cat.color.copy(0.2f), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) { Text(categoryEmoji(cat.name), fontSize = 22.sp) }
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    cat.name,
-                                    style      = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium,
-                                    color      = if (isSelected) Blue500 else Gray700
-                                )
+            // ── Category Grid ─────────────────────────────────────────────────
+            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                Text(
+                    "카테고리",
+                    style      = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color      = Gray600,
+                    modifier   = Modifier.padding(bottom = 14.dp)
+                )
+                categories.chunked(3).forEach { row ->
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        row.forEach { cat ->
+                            val isSelected = selectedCategory == cat.id
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .then(
+                                        if (isSelected) Modifier
+                                            .shadow(4.dp, RoundedCornerShape(16.dp))
+                                            .background(
+                                                Brush.linearGradient(listOf(Blue50, Purple50)),
+                                                RoundedCornerShape(16.dp)
+                                            )
+                                            .border(1.5.dp, Blue400.copy(0.4f), RoundedCornerShape(16.dp))
+                                        else Modifier.background(Gray50)
+                                    )
+                                    .clickable { selectedCategory = cat.id }
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box(
+                                        modifier         = Modifier.size(54.dp).background(cat.color.copy(0.2f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) { Text(categoryEmoji(cat.name), fontSize = 22.sp) }
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        cat.name,
+                                        style      = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color      = if (isSelected) Blue500 else Gray700
+                                    )
+                                }
                             }
                         }
+                        repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
                     }
-                    repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
+                    Spacer(Modifier.height(12.dp))
                 }
-                Spacer(Modifier.height(12.dp))
             }
+
+            // ── Note Input ────────────────────────────────────────────────────
+            OutlinedTextField(
+                value         = note,
+                onValueChange = { note = it },
+                placeholder   = { Text("어디서 사용했나요?", color = Gray400) },
+                modifier      = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 4.dp),
+                shape         = RoundedCornerShape(16.dp),
+                colors        = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor      = Blue400,
+                    unfocusedBorderColor    = Gray200,
+                    unfocusedContainerColor = Gray50,
+                    focusedContainerColor   = Color.White
+                ),
+                singleLine    = true
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
-
-        // ── Note Input ────────────────────────────────────────────────────────
-        OutlinedTextField(
-            value         = note,
-            onValueChange = { note = it },
-            placeholder   = { Text("어디서 사용했나요?", color = Gray400) },
-            modifier      = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 4.dp),
-            shape         = RoundedCornerShape(16.dp),
-            colors        = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor      = Blue400,
-                unfocusedBorderColor    = Gray200,
-                unfocusedContainerColor = Gray50,
-                focusedContainerColor   = Color.White
-            ),
-            singleLine    = true
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
 
         // ── Number Pad ────────────────────────────────────────────────────────
         Column(
-            modifier            = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            modifier            = Modifier
+                .fillMaxWidth()
+                .background(Color.White)
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             listOf("1","2","3","4","5","6","7","8","9","C","0","⌫").chunked(3).forEach { row ->

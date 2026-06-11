@@ -158,6 +158,32 @@ class TransactionController(
         }
     }
 
+    /**
+     * DELETE /api/transactions/by-client
+     * Body: { clientTransactionId: String }
+     *
+     * 앱에서는 서버 DB id를 알 수 없으므로 clientTransactionId로 찾아서 삭제.
+     */
+    @DeleteMapping("/by-client")
+    fun deleteByClientId(
+        @RequestHeader("Authorization") authHeader: String?,
+        @RequestBody req: DeleteTransactionByClientIdRequest
+    ): ResponseEntity<Any> {
+        val userId = resolveUserId(authHeader)
+            ?: return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
+
+        return try {
+            transactionService.deleteByClientId(userId, req.clientTransactionId)
+            ResponseEntity.noContent().build()
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(404).body(mapOf("error" to (e.message ?: "거래 내역을 찾을 수 없습니다.")))
+        } catch (e: IllegalAccessException) {
+            ResponseEntity.status(403).body(mapOf("error" to (e.message ?: "접근 권한이 없습니다.")))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "삭제 중 오류가 발생했습니다.")))
+        }
+    }
+
     // ── 월별 통계 ─────────────────────────────────────────────────────────────
 
     /** GET /api/transactions/stats?year=2025&month=5 */

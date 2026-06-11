@@ -37,6 +37,11 @@ data class UpdateTransactionByClientIdRequest(
     val category: String? = null
 )
 
+/** DELETE /api/transactions/by-client */
+data class DeleteTransactionByClientIdRequest(
+    val clientTransactionId: String
+)
+
 // ── 응답 ──────────────────────────────────────────────────────────────────────
 
 data class TransactionResponse(

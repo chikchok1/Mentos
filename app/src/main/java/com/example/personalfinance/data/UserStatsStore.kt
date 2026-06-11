@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.example.personalfinance.network.ApiClient
+import com.example.personalfinance.network.DeleteTransactionByClientIdRequest
 import com.example.personalfinance.network.PrivacySettingsRequest
 import com.example.personalfinance.network.PrivacySettingsResponse
 import com.example.personalfinance.network.SaveTransactionRequest
@@ -809,6 +810,98 @@ class UserStatsStore private constructor(context: Context) {
 
     fun updateTransactionCategory(transactionId: String, newCategory: String): Boolean =
         updateTransactionFields(transactionId, newMerchantName = null, newCategory = newCategory)
+
+    /**
+     * 거래 내역 삭제.
+     *
+     * 서버 동기화 거래는 서버 DELETE 성공 후에만 로컬 상태를 갱신한다.
+     * 샘플 거래는 서버에 존재하지 않는 로컬 전용 데이터이므로 로컬에서만 제거한다.
+     */
+    suspend fun deleteTransaction(transactionId: String): Boolean {
+        val currentTransactions = _transactionsFlow.value
+        val target = currentTransactions.firstOrNull { it.id == transactionId } ?: return false
+
+        if (target.source != TransactionSource.SAMPLE) {
+            val deletedOnServer = try {
+                val api = ApiClient.getTransactionApi(appContext, tokenManager)
+                val resp = api.deleteByClientId(DeleteTransactionByClientIdRequest(transactionId))
+                if (!resp.isSuccessful) {
+                    Log.w(TAG, "서버 거래 삭제 실패 (HTTP ${resp.code()}): clientId=$transactionId")
+                    false
+                } else {
+                    true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "서버 거래 삭제 예외: ${e.message}")
+                false
+            }
+            if (!deletedOnServer) return false
+        }
+
+        val newTransactions = currentTransactions.filter { it.id != transactionId }
+        val current = _statsFlow.value
+        val newStats = rebuildStatsForTransactions(newTransactions, current)
+        saveStats(newStats, newTransactions)
+        refreshServerStats()
+        return true
+    }
+
+    private fun rebuildStatsForTransactions(
+        transactions: List<Transaction>,
+        current: UserStats
+    ): UserStats {
+        val monthlySpending = mutableMapOf<YearMonth, Long>()
+        var totalXP = 0
+
+        transactions
+            .sortedBy { tx ->
+                runCatching { LocalDateTime.parse(tx.occurredAt) }
+                    .getOrDefault(LocalDateTime.MIN)
+            }
+            .forEach { tx ->
+                val txMonth = runCatching {
+                    YearMonth.from(LocalDateTime.parse(tx.occurredAt))
+                }.getOrNull()
+                val spendingAfterTransaction = if (txMonth != null) {
+                    val nextSpending = (monthlySpending[txMonth] ?: 0L) + tx.amount
+                    monthlySpending[txMonth] = nextSpending
+                    nextSpending
+                } else {
+                    tx.amount
+                }
+                totalXP += UserStatsCalculator.calculateEarnedXP(
+                    amount = tx.amount,
+                    category = tx.category,
+                    thisMonthSpending = spendingAfterTransaction,
+                    monthlyBudget = current.monthlyBudget
+                )
+            }
+
+        val thisMonth = YearMonth.now()
+        val thisMonthTxs = transactions.filter { tx ->
+            runCatching {
+                YearMonth.from(LocalDateTime.parse(tx.occurredAt).toLocalDate())
+            }.getOrNull() == thisMonth
+        }
+        val newSpending = thisMonthTxs.sumOf { it.amount }
+        val newCategorySpending = ExpenseCategoryClassifier.categories
+            .associateWith { cat ->
+                thisMonthTxs.filter { it.category == cat }.sumOf { it.amount }
+            }
+        val newJob = UserStatsCalculator.determineJob(newCategorySpending)
+
+        return current.copy(
+            currentLevel      = UserStatsCalculator.calculateLevel(totalXP),
+            currentXP         = totalXP,
+            nextLevelXP       = UserStatsCalculator.nextLevelThreshold(totalXP),
+            job               = newJob,
+            jobReason         = UserStatsCalculator.jobReason(newJob, newCategorySpending, newSpending),
+            jobMonth          = thisMonth.toString(),
+            thisMonthSpending = newSpending,
+            categorySpending  = newCategorySpending,
+            transactions      = transactions
+        )
+    }
 
     fun clearForLogout() {
         prefs.edit().clear().apply()
