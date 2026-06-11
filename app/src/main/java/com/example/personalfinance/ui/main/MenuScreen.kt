@@ -120,7 +120,7 @@ fun MenuScreen(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    "Lv.$level $levelTitle · $jobTitle",
+                    "Lv.$level $levelTitle $jobTitle",
                     style    = MaterialTheme.typography.bodyMedium,
                     color    = Gray500,
                     modifier = Modifier.padding(top = 4.dp)

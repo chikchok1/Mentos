@@ -9,8 +9,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
-import androidx.compose.material.icons.automirrored.rounded.TrendingDown
-import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,7 +18,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -76,7 +73,8 @@ fun HomeScreen(navController: NavController) {
     val jobReason   = userStats.jobReason
     val safeJobReason = jobReason.trim().takeIf { it.isNotBlank() }
         ?: "이번 달 소비 패턴이 반영되었어요."
-    val jobGuides = UserStatsCalculator.jobGuides()
+    val levelGrades = UserStatsCalculator.levelGradeGuides()
+    val nextGrade   = UserStatsCalculator.nextGrade(currentLevel)
 
     var showJobDialog by remember { mutableStateOf(false) }
 
@@ -92,7 +90,7 @@ fun HomeScreen(navController: NavController) {
     }
     val navBarHeight = 88.dp + bottomInset
 
-    // ── 직업 이유 다이얼로그 ──────────────────────────────────────────────────
+    // ── 성장 정보 다이얼로그 ──────────────────────────────────────────────────
     if (showJobDialog) {
         val jobEmoji = when (currentJob) {
             "cook"     -> "🍳"
@@ -123,6 +121,7 @@ fun HomeScreen(navController: NavController) {
                         .background(Color.White)
                         .padding(horizontal = 24.dp, vertical = 28.dp)
                 ) {
+                    // ── 스크롤 가능한 본문 ──────────────────────────────────
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
@@ -130,8 +129,9 @@ fun HomeScreen(navController: NavController) {
                             .weight(1f, fill = false)
                             .verticalScroll(rememberScrollState())
                     ) {
+                        // 제목
                         Text(
-                            text = "나의 직업",
+                            text = "나의 성장 정보",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = Gray900,
@@ -140,97 +140,112 @@ fun HomeScreen(navController: NavController) {
 
                         Spacer(Modifier.height(18.dp))
 
-                        // ── 아이콘 원형 배지 ──────────────────────────
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .background(Blue50, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = jobEmoji,
-                                fontSize = 32.sp
-                            )
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Text(
-                            text = jobTitle,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Gray900,
-                            letterSpacing = 0.sp,
-                        )
-
-                        Spacer(Modifier.height(4.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .background(Blue50, RoundedCornerShape(50))
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "이번 달 직업",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Blue500,
-                                letterSpacing = 0.sp,
-                            )
-                        }
-
-                        Spacer(Modifier.height(22.dp))
-
-                        JobInfoSection(title = "현재 직업 안내") {
-                            Text(
-                                text = safeJobReason,
-                                fontSize = 14.sp,
-                                color = Gray700,
-                                lineHeight = 22.sp,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                        // ── 1. 현재 성장 상태 ──────────────────────────────
+                        JobInfoSection(title = "현재 성장 상태") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(text = jobEmoji, fontSize = 26.sp)
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    text = "Lv.$currentLevel $levelTitle $jobTitle",
+                                    fontSize = 19.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Gray900,
+                                    letterSpacing = 0.sp,
+                                )
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (nextGrade != null) {
+                                    Text(
+                                        text = "다음 등급: Lv.${nextGrade.minLevel} ${nextGrade.title}",
+                                        fontSize = 13.sp,
+                                        color = Blue500,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                } else {
+                                    Text(
+                                        text = "★ 최고 등급에 도달했어요!",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFFE65100),
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(Modifier.height(12.dp))
 
-                        JobInfoSection(title = "직업 변경 기준") {
-                            Text(
-                                text = "직업은 이번 달 소비 카테고리 비중을 기준으로 자동 부여되며, 소비 패턴이 달라지면 같은 달 안에서도 변경될 수 있어요.",
-                                fontSize = 13.sp,
-                                color = Gray600,
-                                lineHeight = 20.sp,
-                                textAlign = TextAlign.Start,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        JobInfoSection(title = "대표 직업 예시") {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                jobGuides.forEach { guide ->
+                        // ── 2. 레벨 등급표 ─────────────────────────────────
+                        JobInfoSection(title = "레벨 등급표") {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                levelGrades.forEach { grade ->
+                                    val isCurrent = levelTitle == grade.title
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.Top
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (isCurrent) Blue500.copy(alpha = 0.10f)
+                                                else Color.Transparent
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (isCurrent) {
+                                                Text(
+                                                    text = "▶ ",
+                                                    fontSize = 10.sp,
+                                                    color = Blue500,
+                                                )
+                                            } else {
+                                                Spacer(Modifier.width(14.dp))
+                                            }
+                                            Text(
+                                                text = "Lv.${grade.minLevel} 이상",
+                                                fontSize = 13.sp,
+                                                color = if (isCurrent) Blue500 else Gray500,
+                                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                                            )
+                                        }
                                         Text(
-                                            text = UserStatsCalculator.jobTitle(guide.job),
+                                            text = grade.title,
                                             fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = Gray900,
-                                            modifier = Modifier.width(76.dp)
-                                        )
-                                        Text(
-                                            text = guide.description,
-                                            fontSize = 13.sp,
-                                            color = Gray600,
-                                            lineHeight = 19.sp,
-                                            modifier = Modifier.weight(1f)
+                                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isCurrent) Blue500 else Gray700,
                                         )
                                     }
                                 }
                             }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // ── 3. 직업 변경 기준 ──────────────────────────────
+                        JobInfoSection(title = "직업 변경 기준") {
+                            Text(
+                                text = safeJobReason,
+                                fontSize = 13.sp,
+                                color = Gray700,
+                                lineHeight = 20.sp,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "직업은 이번 달 소비 카테고리 비중을 기준으로 자동 부여되며, 소비 패턴이 달라지면 같은 달 안에서도 변경될 수 있어요.",
+                                fontSize = 12.sp,
+                                color = Gray500,
+                                lineHeight = 19.sp,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
 
@@ -302,7 +317,7 @@ fun HomeScreen(navController: NavController) {
 
                     // 직업 배지 — 단순 텍스트, 터치 시 이유 팝업
                     Text(
-                        text       = "Lv.$currentLevel $levelTitle · $jobTitle",
+                        text       = "Lv.$currentLevel $levelTitle $jobTitle",
                         style      = MaterialTheme.typography.bodySmall,
                         color      = Gray500,
                         modifier   = Modifier.clickable { showJobDialog = true }

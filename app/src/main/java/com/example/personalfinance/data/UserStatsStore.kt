@@ -114,12 +114,38 @@ object UserStatsCalculator {
     )
 
     fun levelTitle(level: Int): String = when {
+        level >= 70 -> "전설"
         level >= 50 -> "마스터"
-        level >= 30 -> "명인"
-        level >= 20 -> "전문가"
-        level >= 10 -> "숙련 모험가"
-        level >= 5  -> "견습 모험가"
-        else        -> "초보 모험가"
+        level >= 40 -> "고수"
+        level >= 30 -> "엘리트"
+        level >= 25 -> "전문가"
+        level >= 20 -> "베테랑"
+        level >= 15 -> "능숙"
+        level >= 10 -> "숙련"
+        level >= 5  -> "견습"
+        else        -> "초보"
+    }
+
+    data class LevelGrade(val minLevel: Int, val title: String)
+
+    fun levelGradeGuides(): List<LevelGrade> = listOf(
+        LevelGrade(1,  "초보"),
+        LevelGrade(5,  "견습"),
+        LevelGrade(10, "숙련"),
+        LevelGrade(15, "능숙"),
+        LevelGrade(20, "베테랑"),
+        LevelGrade(25, "전문가"),
+        LevelGrade(30, "엘리트"),
+        LevelGrade(40, "고수"),
+        LevelGrade(50, "마스터"),
+        LevelGrade(70, "전설"),
+    )
+
+    /** 현재 레벨 기준 다음 등급. 마지막 등급이면 null. */
+    fun nextGrade(level: Int): LevelGrade? {
+        val grades = levelGradeGuides()
+        val currentIdx = grades.indexOfLast { level >= it.minLevel }
+        return grades.getOrNull(currentIdx + 1)
     }
 
     fun determineJob(categorySpending: Map<String, Long>): String {
