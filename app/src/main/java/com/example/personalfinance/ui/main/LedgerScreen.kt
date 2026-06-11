@@ -625,7 +625,8 @@ fun LedgerScreen(navController: NavController) {
                                         } else {
                                             Toast.makeText(
                                                 context,
-                                                "삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+                                                store.lastDeleteFailureMessage
+                                                    ?: "삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.",
                                                 Toast.LENGTH_SHORT
                                             ).show()
                                         }
@@ -768,6 +769,7 @@ fun LedgerScreen(navController: NavController) {
                 Button(
                     onClick = {
                         if (!hasAnyChange) return@Button
+                        scope.launch {
                         isSaving  = true
                         saveError = null
                         val newMerchant = editingMerchantName.trim().takeIf { merchantChanged }
@@ -775,6 +777,8 @@ fun LedgerScreen(navController: NavController) {
                         val ok = store.updateTransactionFields(editTx.id, newMerchant, newCategory)
                         isSaving = false
                         if (ok) {
+                            serverStats = null
+                            statsRefreshNonce += 1
                             selectedTransactionDetailId = editTx.id
                             scope.launch { sheetState.hide() }.invokeOnCompletion {
                                 if (!sheetState.isVisible) {
@@ -786,7 +790,9 @@ fun LedgerScreen(navController: NavController) {
                                 }
                             }
                         } else {
-                            saveError = "수정에 실패했습니다. 다시 시도해주세요."
+                            saveError = store.lastUpdateFailureMessage
+                                ?: "수정에 실패했습니다. 다시 시도해주세요."
+                        }
                         }
                     },
                     modifier  = Modifier.fillMaxWidth().height(52.dp),

@@ -22,6 +22,8 @@ data class Transaction(
     val source: String = TransactionSource.SAMPLE,
     val occurredAt: String = java.time.LocalDateTime.now().toString(),
     val id: String = "$source|$occurredAt|$amount|$store",
+    val serverTransactionId: Long? = null,
+    val clientTransactionId: String? = null,
     val rawNotification: String? = null
 )
 

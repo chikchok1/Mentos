@@ -129,6 +129,28 @@ class TransactionController(
         }
     }
 
+    @PatchMapping("/{id}")
+    fun updateById(
+        @RequestHeader("Authorization") authHeader: String?,
+        @PathVariable id: Long,
+        @RequestBody req: UpdateTransactionByIdRequest
+    ): ResponseEntity<Any> {
+        val userId = resolveUserId(authHeader)
+            ?: return ResponseEntity.status(401).body(mapOf("error" to "유효하지 않은 토큰입니다."))
+
+        return try {
+            ResponseEntity.ok(
+                transactionService.updateById(userId, id, req.merchantName, req.category)
+            )
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(404).body(mapOf("error" to (e.message ?: "거래 내역을 찾을 수 없습니다.")))
+        } catch (e: IllegalAccessException) {
+            ResponseEntity.status(403).body(mapOf("error" to (e.message ?: "접근 권한이 없습니다.")))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "수정 중 오류가 발생했습니다.")))
+        }
+    }
+
     // ── 카테고리 수정 (clientTransactionId 기준) — 앱 연동 전용 ──────────────────
 
     /**
@@ -187,6 +209,27 @@ class TransactionController(
     // ── 월별 통계 ─────────────────────────────────────────────────────────────
 
     /** GET /api/transactions/stats?year=2025&month=5 */
+    /** DELETE /api/transactions/{transactionId} */
+    @DeleteMapping("/{transactionId}")
+    fun deleteById(
+        @RequestHeader("Authorization") authHeader: String?,
+        @PathVariable transactionId: Long
+    ): ResponseEntity<Any> {
+        val userId = resolveUserId(authHeader)
+            ?: return ResponseEntity.status(401).body(mapOf("error" to "?좏슚?섏? ?딆? ?좏겙?낅땲??"))
+
+        return try {
+            transactionService.deleteById(userId, transactionId)
+            ResponseEntity.noContent().build()
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(404).body(mapOf("error" to (e.message ?: "Transaction not found.")))
+        } catch (e: IllegalAccessException) {
+            ResponseEntity.status(403).body(mapOf("error" to (e.message ?: "No permission to access this transaction.")))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "Delete failed.")))
+        }
+    }
+
     @GetMapping("/stats")
     fun getMonthlyStats(
         @RequestHeader("Authorization") authHeader: String?,

@@ -37,6 +37,11 @@ data class UpdateTransactionByClientIdRequest(
     val category: String? = null
 )
 
+data class UpdateTransactionByIdRequest(
+    val merchantName: String? = null,
+    val category: String? = null
+)
+
 /** DELETE /api/transactions/by-client */
 data class DeleteTransactionByClientIdRequest(
     val clientTransactionId: String
@@ -52,6 +57,7 @@ data class TransactionResponse(
     /** ISO-8601 문자열로 직렬화됨 — Jackson 설정으로 보장 */
     val occurredAt: String,
     val source: String,
+    val clientTransactionId: String? = null,
     val createdAt: String
 )
 

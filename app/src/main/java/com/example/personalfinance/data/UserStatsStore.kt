@@ -9,6 +9,7 @@ import com.example.personalfinance.network.PrivacySettingsRequest
 import com.example.personalfinance.network.PrivacySettingsResponse
 import com.example.personalfinance.network.SaveTransactionRequest
 import com.example.personalfinance.network.UpdateTransactionByClientIdRequest
+import com.example.personalfinance.network.UpdateTransactionByIdRequest
 import com.example.personalfinance.network.UpdateCategoryByClientIdRequest
 import com.example.personalfinance.network.UpdateBudgetRequest
 import com.example.personalfinance.network.UpdateUserProfileRequest
@@ -344,6 +345,12 @@ class UserStatsStore private constructor(context: Context) {
     private val _transactionsFlow = MutableStateFlow(loadTransactions())
     val transactionsFlow: StateFlow<List<Transaction>> = _transactionsFlow.asStateFlow()
 
+    var lastDeleteFailureMessage: String? = null
+        private set
+
+    var lastUpdateFailureMessage: String? = null
+        private set
+
     private var feedbackSequence = 0L
     private val _feedbackQueue = MutableStateFlow<List<UserStatsFeedback>>(emptyList())
     val feedbackQueue: StateFlow<List<UserStatsFeedback>> = _feedbackQueue.asStateFlow()
@@ -435,7 +442,9 @@ class UserStatsStore private constructor(context: Context) {
                     status     = TransactionStatus.APPROVED_RECORDED,
                     source     = r.source,
                     occurredAt = r.occurredAt,
-                    id         = r.occurredAt + "|" + r.amount + "|" + r.merchantName
+                    id         = localIdForServerTransaction(r.id, r.clientTransactionId),
+                    serverTransactionId = r.id,
+                    clientTransactionId = r.clientTransactionId
                 )
             }.sortedByDescending { it.occurredAt }
 
@@ -649,7 +658,8 @@ class UserStatsStore private constructor(context: Context) {
             status = status,
             source = source,
             occurredAt = occurredAt.toString(),
-            id = clientId
+            id = clientId,
+            clientTransactionId = clientId
         )
         val currentTransactions = _transactionsFlow.value
         val newTransactions = TransactionHistory.prependIfAbsent(
@@ -719,6 +729,9 @@ class UserStatsStore private constructor(context: Context) {
                 )
                 val resp = api.save(req)
                 if (resp.isSuccessful) {
+                    resp.body()?.let { saved ->
+                        attachServerIdToTransaction(clientId, saved.id)
+                    }
                     Log.d(TAG, "서버 동기화 완료: clientId=$clientId")
                 } else {
                     Log.w(TAG, "서버 동기화 실패 (HTTP ${resp.code()}): clientId=$clientId")
@@ -739,14 +752,17 @@ class UserStatsStore private constructor(context: Context) {
      * @param newCategory      null이면 처리 안 함
      * @return 변경이 있으면 true, 변경할 내용 없으면 false
      */
-    fun updateTransactionFields(
+    suspend fun updateTransactionFields(
         transactionId: String,
         newMerchantName: String?,
         newCategory: String?
     ): Boolean {
         val currentTransactions = _transactionsFlow.value
         val index = currentTransactions.indexOfFirst { it.id == transactionId }
-        if (index == -1) return false
+        if (index == -1) {
+            lastUpdateFailureMessage = "수정할 내역을 찾을 수 없어요."
+            return false
+        }
 
         val oldTx = currentTransactions[index]
 
@@ -760,6 +776,22 @@ class UserStatsStore private constructor(context: Context) {
         if (resolvedMerchant == oldTx.store && resolvedCategory == null) return false
         if (resolvedMerchant == null && resolvedCategory == oldTx.category) return false
         if (resolvedMerchant == oldTx.store && resolvedCategory == oldTx.category) return false
+
+        val clientTransactionId = oldTx.clientTransactionId?.takeIf { it.isNotBlank() }
+        val serverTransactionId = oldTx.serverTransactionId
+        if (clientTransactionId == null && serverTransactionId == null) {
+            Log.w(TAG, "Transaction update blocked: missing clientTransactionId and serverTransactionId. localId=${oldTx.id}")
+            lastUpdateFailureMessage = "수정할 수 없는 이전 내역입니다."
+            return false
+        }
+
+        val updatedOnServer = updateTransactionOnServer(
+            clientTransactionId = clientTransactionId,
+            serverTransactionId = serverTransactionId,
+            merchantName = resolvedMerchant,
+            category = resolvedCategory
+        )
+        if (!updatedOnServer) return false
 
         val newTx = oldTx.copy(
             store    = resolvedMerchant ?: oldTx.store,
@@ -801,15 +833,67 @@ class UserStatsStore private constructor(context: Context) {
             enqueueFeedback(buildFeedbackEvents(previous = current, current = newStats))
         }
 
-        syncScope.launch {
-            syncFieldsUpdateWithRetry(transactionId, resolvedMerchant, resolvedCategory)
-        }
-
+        refreshServerStats()
+        lastUpdateFailureMessage = null
         return true
     }
 
-    fun updateTransactionCategory(transactionId: String, newCategory: String): Boolean =
+    suspend fun updateTransactionCategory(transactionId: String, newCategory: String): Boolean =
         updateTransactionFields(transactionId, newMerchantName = null, newCategory = newCategory)
+
+    private suspend fun updateTransactionOnServer(
+        clientTransactionId: String?,
+        serverTransactionId: Long?,
+        merchantName: String?,
+        category: String?
+    ): Boolean {
+        if (merchantName == null && category == null) return true
+
+        return try {
+            val api = ApiClient.getTransactionApi(appContext, tokenManager)
+            val resp = if (clientTransactionId != null) {
+                api.updateByClientId(
+                    UpdateTransactionByClientIdRequest(
+                        clientTransactionId = clientTransactionId,
+                        merchantName = merchantName,
+                        category = category
+                    )
+                )
+            } else {
+                api.updateById(
+                    serverTransactionId!!,
+                    UpdateTransactionByIdRequest(
+                        merchantName = merchantName,
+                        category = category
+                    )
+                )
+            }
+
+            if (resp.isSuccessful) {
+                true
+            } else {
+                val errorBody = runCatching { resp.errorBody()?.string().orEmpty() }.getOrDefault("")
+                Log.w(
+                    TAG,
+                    "Server transaction update failed (HTTP ${resp.code()}): " +
+                        "clientId=$clientTransactionId serverId=$serverTransactionId errorBody=$errorBody"
+                )
+                lastUpdateFailureMessage = updateFailureMessage(resp.code())
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Server transaction update exception: ${e.message}")
+            lastUpdateFailureMessage = "수정에 실패했습니다. 잠시 후 다시 시도해 주세요."
+            false
+        }
+    }
+
+    private fun updateFailureMessage(statusCode: Int): String =
+        when (statusCode) {
+            401, 403 -> "로그인이 만료되었어요. 다시 로그인해 주세요."
+            404 -> "서버에서 해당 내역을 찾을 수 없어요."
+            else -> "수정에 실패했습니다. 잠시 후 다시 시도해 주세요."
+        }
 
     /**
      * 거래 내역 삭제.
@@ -819,32 +903,69 @@ class UserStatsStore private constructor(context: Context) {
      */
     suspend fun deleteTransaction(transactionId: String): Boolean {
         val currentTransactions = _transactionsFlow.value
-        val target = currentTransactions.firstOrNull { it.id == transactionId } ?: return false
-
-        if (target.source != TransactionSource.SAMPLE) {
-            val deletedOnServer = try {
-                val api = ApiClient.getTransactionApi(appContext, tokenManager)
-                val resp = api.deleteByClientId(DeleteTransactionByClientIdRequest(transactionId))
-                if (!resp.isSuccessful) {
-                    Log.w(TAG, "서버 거래 삭제 실패 (HTTP ${resp.code()}): clientId=$transactionId")
-                    false
-                } else {
-                    true
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "서버 거래 삭제 예외: ${e.message}")
-                false
+        val target = currentTransactions.firstOrNull { it.id == transactionId }
+            ?: run {
+                lastDeleteFailureMessage = "삭제할 내역을 찾을 수 없어요."
+                return false
             }
-            if (!deletedOnServer) return false
+        val clientTransactionId = target.clientTransactionId?.takeIf { it.isNotBlank() }
+        val serverTransactionId = target.serverTransactionId
+
+        if (clientTransactionId == null && serverTransactionId == null) {
+            Log.w(TAG, "Transaction delete blocked: missing clientTransactionId and serverTransactionId. localId=${target.id}")
+            lastDeleteFailureMessage = "삭제할 수 없는 이전 내역입니다."
+            return false
         }
+
+        val deletedOnServer = deleteTransactionOnServer(clientTransactionId, serverTransactionId)
+        if (!deletedOnServer) return false
 
         val newTransactions = currentTransactions.filter { it.id != transactionId }
         val current = _statsFlow.value
         val newStats = rebuildStatsForTransactions(newTransactions, current)
         saveStats(newStats, newTransactions)
         refreshServerStats()
+        lastDeleteFailureMessage = null
         return true
     }
+
+    private suspend fun deleteTransactionOnServer(
+        clientTransactionId: String?,
+        serverTransactionId: Long?
+    ): Boolean {
+        return try {
+            val api = ApiClient.getTransactionApi(appContext, tokenManager)
+            val resp = if (clientTransactionId != null) {
+                api.deleteByClientId(DeleteTransactionByClientIdRequest(clientTransactionId))
+            } else {
+                api.deleteById(serverTransactionId!!)
+            }
+
+            if (resp.isSuccessful) {
+                true
+            } else {
+                val errorBody = runCatching { resp.errorBody()?.string().orEmpty() }.getOrDefault("")
+                Log.w(
+                    TAG,
+                    "Server transaction delete failed (HTTP ${resp.code()}): " +
+                        "clientId=$clientTransactionId serverId=$serverTransactionId errorBody=$errorBody"
+                )
+                lastDeleteFailureMessage = deleteFailureMessage(resp.code())
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Server transaction delete exception: ${e.message}")
+            lastDeleteFailureMessage = "삭제에 실패했습니다. 잠시 후 다시 시도해 주세요."
+            false
+        }
+    }
+
+    private fun deleteFailureMessage(statusCode: Int): String =
+        when (statusCode) {
+            401, 403 -> "로그인이 만료되었어요. 다시 로그인해 주세요."
+            404 -> "서버에서 해당 내역을 찾을 수 없어요."
+            else -> "삭제에 실패했습니다. 잠시 후 다시 시도해 주세요."
+        }
 
     private fun rebuildStatsForTransactions(
         transactions: List<Transaction>,
@@ -1109,6 +1230,25 @@ class UserStatsStore private constructor(context: Context) {
         merchantName: String,
         category: String
     ): String = "$source|$occurredAt|$amount|$merchantName|$category"
+
+    private fun localIdForServerTransaction(
+        serverTransactionId: Long,
+        clientTransactionId: String?
+    ): String = clientTransactionId?.takeIf { it.isNotBlank() } ?: "server:$serverTransactionId"
+
+    private fun attachServerIdToTransaction(clientTransactionId: String, serverTransactionId: Long) {
+        val currentTransactions = _transactionsFlow.value
+        val index = currentTransactions.indexOfFirst { it.id == clientTransactionId }
+        if (index == -1) return
+
+        val updatedTransactions = currentTransactions.toMutableList()
+        updatedTransactions[index] = updatedTransactions[index].copy(
+            serverTransactionId = serverTransactionId,
+            clientTransactionId = clientTransactionId
+        )
+        val currentStats = _statsFlow.value
+        saveStats(currentStats.copy(transactions = updatedTransactions), updatedTransactions)
+    }
 
     private suspend fun syncCategoryUpdateWithRetry(transactionId: String, category: String) {
         val api = ApiClient.getTransactionApi(appContext, tokenManager)

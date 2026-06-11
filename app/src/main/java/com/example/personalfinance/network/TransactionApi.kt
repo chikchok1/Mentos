@@ -32,6 +32,11 @@ data class UpdateTransactionByClientIdRequest(
     val category: String? = null
 )
 
+data class UpdateTransactionByIdRequest(
+    val merchantName: String? = null,
+    val category: String? = null
+)
+
 data class DeleteTransactionByClientIdRequest(
     val clientTransactionId: String
 )
@@ -45,6 +50,7 @@ data class TransactionResponse(
     val category: String,
     val occurredAt: String,
     val source: String,
+    val clientTransactionId: String? = null,
     val createdAt: String
 )
 
@@ -92,6 +98,12 @@ interface TransactionApi {
         @Body req: UpdateTransactionByClientIdRequest
     ): Response<TransactionResponse>
 
+    @PATCH("api/transactions/{transactionId}")
+    suspend fun updateById(
+        @Path("transactionId") transactionId: Long,
+        @Body req: UpdateTransactionByIdRequest
+    ): Response<TransactionResponse>
+
     /** 거래 삭제 — clientTransactionId 기준 */
     @HTTP(method = "DELETE", path = "api/transactions/by-client", hasBody = true)
     suspend fun deleteByClientId(
@@ -99,6 +111,11 @@ interface TransactionApi {
     ): Response<Unit>
 
     /** 월별 통계 */
+    @DELETE("api/transactions/{transactionId}")
+    suspend fun deleteById(
+        @Path("transactionId") transactionId: Long
+    ): Response<Unit>
+
     @GET("api/transactions/stats")
     suspend fun getStats(
         @Query("year")  year: Int,

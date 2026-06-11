@@ -188,6 +188,39 @@ class TransactionService(
     }
 
     @Transactional
+    fun updateById(
+        userId: Long,
+        transactionId: Long,
+        newMerchantName: String?,
+        newCategory: String?
+    ): TransactionResponse {
+        val tx = transactionRepository.findById(transactionId)
+            .orElseThrow { NoSuchElementException("Transaction not found. id=$transactionId") }
+
+        if (tx.userId != userId) {
+            throw IllegalAccessException("No permission to access this transaction.")
+        }
+
+        var changed = false
+        if (!newMerchantName.isNullOrBlank()) {
+            tx.merchantName = newMerchantName.trim()
+            changed = true
+        }
+        if (!newCategory.isNullOrBlank()) {
+            tx.category = newCategory.trim()
+            changed = true
+        }
+
+        if (!changed) return tx.toResponse()
+
+        val saved = transactionRepository.save(tx)
+        if (!newCategory.isNullOrBlank()) {
+            userStatsService.recalculate(userId)
+        }
+        return saved.toResponse()
+    }
+
+    @Transactional
     fun deleteByClientId(userId: Long, clientTransactionId: String) {
         val tx = transactionRepository.findByUserIdAndClientTransactionId(userId, clientTransactionId)
             .orElseThrow { NoSuchElementException("거래 내역을 찾을 수 없습니다. clientId=$clientTransactionId") }
@@ -197,6 +230,19 @@ class TransactionService(
     }
 
     // ── 내부 헬퍼 ────────────────────────────────────────────────────────────
+
+    @Transactional
+    fun deleteById(userId: Long, transactionId: Long) {
+        val tx = transactionRepository.findById(transactionId)
+            .orElseThrow { NoSuchElementException("Transaction not found. id=$transactionId") }
+
+        if (tx.userId != userId) {
+            throw IllegalAccessException("No permission to access this transaction.")
+        }
+
+        transactionRepository.delete(tx)
+        userStatsService.recalculate(userId)
+    }
 
     private fun monthRange(year: Int, month: Int): Pair<LocalDateTime, LocalDateTime> {
         val ym    = YearMonth.of(year, month)
@@ -212,6 +258,7 @@ class TransactionService(
         category     = category,
         occurredAt   = occurredAt.toString(),
         source       = source,
+        clientTransactionId = clientTransactionId,
         createdAt    = createdAt.toString()
     )
 }
