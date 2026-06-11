@@ -182,7 +182,86 @@ fun HomeScreen(navController: NavController) {
 
                         Spacer(Modifier.height(12.dp))
 
-                        // ── 2. 레벨 등급표 ─────────────────────────────────
+                        // ── 2. 직업 목록 ───────────────────────────────────
+                        JobInfoSection(title = "직업 목록") {
+                            val jobGuides = UserStatsCalculator.jobGuides()
+                            val jobEmojiMap = mapOf(
+                                "cook"     to "🍳",
+                                "manager"  to "🏠",
+                                "merchant" to "🛍️",
+                                "artist"   to "🎨",
+                                "planner"  to "📋",
+                                "healer"   to "💊"
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                // 모험가 (기본)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (currentJob == "beginner") Blue500.copy(alpha = 0.10f)
+                                            else Color.Transparent
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = "⚔️", fontSize = 16.sp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "모험가",
+                                            fontSize = 13.sp,
+                                            fontWeight = if (currentJob == "beginner") FontWeight.Bold else FontWeight.SemiBold,
+                                            color = if (currentJob == "beginner") Blue500 else Gray700
+                                        )
+                                        Text(
+                                            text = "뚜렷한 소비 패턴이 없을 때 (기본)",
+                                            fontSize = 12.sp,
+                                            color = Gray500,
+                                            lineHeight = 17.sp
+                                        )
+                                    }
+                                }
+                                jobGuides.forEach { guide ->
+                                    val isCurrent = currentJob == guide.job
+                                    val emoji = jobEmojiMap[guide.job] ?: "⚔️"
+                                    val title = UserStatsCalculator.jobTitle(guide.job)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (isCurrent) Blue500.copy(alpha = 0.10f)
+                                                else Color.Transparent
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(text = emoji, fontSize = 16.sp)
+                                        Spacer(Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = title,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                                                color = if (isCurrent) Blue500 else Gray700
+                                            )
+                                            Text(
+                                                text = guide.description,
+                                                fontSize = 12.sp,
+                                                color = Gray500,
+                                                lineHeight = 17.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // ── 3. 레벨 등급표 ─────────────────────────────────
                         JobInfoSection(title = "레벨 등급표") {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 levelGrades.forEach { grade ->
@@ -229,7 +308,7 @@ fun HomeScreen(navController: NavController) {
 
                         Spacer(Modifier.height(12.dp))
 
-                        // ── 3. 직업 변경 기준 ──────────────────────────────
+                        // ── 4. 직업 변경 기준 ──────────────────────────────
                         JobInfoSection(title = "직업 변경 기준") {
                             Text(
                                 text = safeJobReason,
