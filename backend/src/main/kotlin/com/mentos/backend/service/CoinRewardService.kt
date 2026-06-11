@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 
 /**
  * 코인 보상 지급 서비스.
@@ -43,7 +44,7 @@ class CoinRewardService(
     fun checkAttendance(userId: Long): AttendanceResult {
         val user  = userRepository.findById(userId)
             .orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
-        val today = LocalDate.now()
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
 
         if (user.lastAttendanceDate == today) {
             return AttendanceResult(
@@ -80,7 +81,7 @@ class CoinRewardService(
     fun getAttendanceStatus(userId: Long): AttendanceStatus {
         val user  = userRepository.findById(userId)
             .orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
-        val today = LocalDate.now()
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         return AttendanceStatus(
             checkedToday = user.lastAttendanceDate == today,
             totalCoins   = user.coins,
@@ -118,7 +119,7 @@ class CoinRewardService(
      * @return Pair(지급 여부, 지급 코인)
      */
     private fun tryGrantBudgetReward(user: com.mentos.backend.entity.User): Pair<Boolean, Int> {
-        val thisMonth = YearMonth.now()
+        val thisMonth = YearMonth.now(ZoneId.of("Asia/Seoul"))
         val lastMonth = thisMonth.minusMonths(1)
 
         // 이번 달 이미 받았으면 스킵

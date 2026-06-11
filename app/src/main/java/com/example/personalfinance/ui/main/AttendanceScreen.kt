@@ -15,10 +15,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import com.example.personalfinance.data.ShopStore
 import com.example.personalfinance.data.TokenManager
@@ -42,6 +45,7 @@ fun AttendanceScreen(navController: NavController) {
     val coinRewardApi = remember { ApiClient.getCoinRewardApi(context, tokenManager) }
     val coroutine     = rememberCoroutineScope()
     val snackbar      = remember { SnackbarHostState() }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     // ── 화면 상태 ─────────────────────────────────────────────────────────────
     var isLoading       by remember { mutableStateOf(true) }
@@ -55,18 +59,43 @@ fun AttendanceScreen(navController: NavController) {
     var budgetRewardCoins  by remember { mutableStateOf(0) }
 
     // 화면 진입 시 오늘 출석 여부 조회
-    LaunchedEffect(Unit) {
+    suspend fun refreshAttendanceStatus(resetResultState: Boolean) {
         try {
             val resp = coinRewardApi.getAttendanceStatus()
             if (resp.isSuccessful) {
                 val body    = resp.body()
-                checkedToday = body?.get("checkedToday") as? Boolean ?: false
+                val serverCheckedToday = body?.get("checkedToday") as? Boolean ?: false
+                checkedToday = serverCheckedToday
                 totalCoins   = (body?.get("totalCoins") as? Number)?.toInt() ?: 0
+                if (resetResultState || !serverCheckedToday) {
+                    justChecked = false
+                    attendanceCoins = 0
+                    budgetRewarded = false
+                    budgetRewardCoins = 0
+                }
             }
         } catch (e: Exception) {
             // 네트워크 오류 시 조용히 처리
         } finally {
             isLoading = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        refreshAttendanceStatus(resetResultState = true)
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                coroutine.launch {
+                    refreshAttendanceStatus(resetResultState = false)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -292,6 +321,7 @@ fun AttendanceScreen(navController: NavController) {
                                     val alreadyChecked = body?.get("alreadyChecked") as? Boolean ?: false
                                     if (alreadyChecked) {
                                         checkedToday = true
+                                        refreshAttendanceStatus(resetResultState = false)
                                     } else {
                                         attendanceCoins   = (body?.get("attendanceCoins") as? Number)?.toInt() ?: 0
                                         budgetRewarded    = body?.get("budgetRewarded") as? Boolean ?: false
@@ -303,6 +333,7 @@ fun AttendanceScreen(navController: NavController) {
 
                                         checkedToday = true
                                         justChecked  = true
+                                        refreshAttendanceStatus(resetResultState = false)
                                     }
                                 } else {
                                     snackbar.showSnackbar("출석 처리에 실패했어요")

@@ -161,7 +161,8 @@ fun NewRecordScreen(navController: NavController) {
             OutlinedTextField(
                 value         = note,
                 onValueChange = { note = it },
-                placeholder   = { Text("어디서 사용했나요?", color = Gray400) },
+                label         = { Text("가게 이름") },
+                placeholder   = { Text("예: 스타벅스 부산역점", color = Gray400) },
                 modifier      = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp, vertical = 4.dp),
