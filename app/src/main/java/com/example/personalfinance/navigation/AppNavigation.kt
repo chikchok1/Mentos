@@ -36,6 +36,7 @@ import com.example.personalfinance.ui.main.GachaScreen
 import com.example.personalfinance.ui.main.InventoryScreen
 import com.example.personalfinance.ui.main.ShopScreen
 import com.example.personalfinance.ui.auth.LoginScreen
+import com.example.personalfinance.ui.main.AttendanceScreen
 import com.example.personalfinance.ui.main.FriendComparisonScreen
 import com.example.personalfinance.ui.main.FriendsScreen
 import com.example.personalfinance.ui.main.GachaDebugScreen
@@ -60,6 +61,7 @@ sealed class Screen(val route: String) {
     object NotificationDebug : Screen("notification_debug")
     object GachaDebug : Screen("gacha_debug")
     object PermissionSettings : Screen("permission_settings")
+    object Attendance : Screen("attendance")
 }
 
 // ── Navigation Host ───────────────────────────────────────────────────────────
@@ -290,6 +292,7 @@ fun AppNavigation(tokenManager: TokenManager) {
         composable(Screen.Shop.route)                 { ShopScreen(navController)                 }
         composable(Screen.GachaDebug.route)           { GachaDebugScreen(navController)           }
         composable(Screen.PermissionSettings.route)   { PermissionSettingsScreen(navController)   }
+        composable(Screen.Attendance.route)           { AttendanceScreen(navController)             }
     }
 }
 

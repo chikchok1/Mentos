@@ -36,6 +36,7 @@ fun MenuScreen(
     onLogout: () -> Unit = {}
 ) {
     val menuItems = listOf(
+        MenuItem("attendance", "출석 체크", Icons.Rounded.CalendarToday, Color(0xFF534AB7)),
         MenuItem("friends",   "친구",     Icons.Rounded.People,      Blue400),
         MenuItem("shop",      "상점",     Icons.Rounded.Storefront,   CategoryShopping),
         MenuItem("gacha",     "가챠",     Icons.Rounded.AutoAwesome,  CategoryCulture),
@@ -140,6 +141,7 @@ fun MenuScreen(
                         .background(Gray50)
                         .clickable {
                             when (item.id) {
+                                "attendance" -> navController.navigate(com.example.personalfinance.navigation.Screen.Attendance.route)
                                 "friends"   -> navController.navigate(com.example.personalfinance.navigation.Screen.Friends.route)
                                 "shop"      -> navController.navigate(com.example.personalfinance.navigation.Screen.Shop.route)
                                 "gacha"     -> navController.navigate(com.example.personalfinance.navigation.Screen.Gacha.route)

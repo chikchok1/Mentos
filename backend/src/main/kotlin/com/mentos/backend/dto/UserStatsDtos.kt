@@ -14,7 +14,9 @@ data class UserStatsResponse(
     val categorySpending: Map<String, Long>,
     val nickname: String? = null,
     val friendCode: String? = null,
-    val displayName: String? = null
+    val displayName: String? = null,
+    /** 현재 보유 코인 (화면 갱신용) */
+    val coins: Int = 0
 )
 
 data class UpdateBudgetRequest(

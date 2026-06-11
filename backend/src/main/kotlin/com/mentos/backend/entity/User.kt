@@ -59,6 +59,14 @@ class User(
     @Column(nullable = false, length = 7)
     var jobMonth: String = YearMonth.now().toString(),
 
+    /**
+     * 월 예산 성공 보상을 마지막으로 받은 연월 (예: "2025-06").
+     * null 이면 아직 한 번도 받지 않은 상태.
+     * 같은 연월에 중복 지급을 방지하기 위해 사용.
+     */
+    @Column(nullable = true, length = 7)
+    var lastBudgetRewardMonth: String? = null,
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     var spendingVisibility: VisibilityScope = VisibilityScope.PRIVATE,

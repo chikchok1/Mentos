@@ -43,6 +43,20 @@ interface TransactionRepository : JpaRepository<Transaction, Long> {
         @Param("end")    end: LocalDateTime
     ): List<Array<Any>>
 
+    /** 월별 전체 지출 합계 (예산 성공 판단용) */
+    @Query("""
+        SELECT COALESCE(SUM(t.amount), 0)
+        FROM Transaction t
+        WHERE t.userId = :userId
+          AND t.occurredAt >= :start
+          AND t.occurredAt < :end
+    """)
+    fun sumAmountInRange(
+        @Param("userId") userId: Long,
+        @Param("start")  start: LocalDateTime,
+        @Param("end")    end: LocalDateTime
+    ): Long
+
     /** 월별 일자별 합계 */
     @Query("""
         SELECT DAY(t.occurredAt), SUM(t.amount)

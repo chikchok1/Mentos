@@ -15,7 +15,8 @@ import java.time.YearMonth
 class UserStatsService(
     private val userRepository: UserRepository,
     private val transactionRepository: TransactionRepository,
-    private val userProfileService: UserProfileService
+    private val userProfileService: UserProfileService,
+    private val coinRewardService: CoinRewardService
 ) {
     @Transactional
     fun getStats(userId: Long): UserStatsResponse {
@@ -80,18 +81,32 @@ class UserStatsService(
         return userRepository.save(user).toStatsResponse(categorySpending, month)
     }
 
+    /**
+     * 거래 저장 후 XP 반영 + 레벨업 시 코인 보상 지급.
+     * 레벨업 코인은 CoinRewardService에 위임한다.
+     */
     @Transactional
     fun applyTransaction(userId: Long, transaction: Transaction) {
-        val user = findUser(userId)
+        val user            = findUser(userId)
+        val previousLevel   = user.level
+
         val transactionMonth = YearMonth.from(transaction.occurredAt)
-        val monthlySpending = categorySpending(userId, transactionMonth).values.sum()
-        val earnedXp = calculateEarnedXp(transaction.amount, transaction.category, monthlySpending, user.monthlyBudget)
+        val monthlySpending  = categorySpending(userId, transactionMonth).values.sum()
+        val earnedXp         = calculateEarnedXp(
+            transaction.amount, transaction.category, monthlySpending, user.monthlyBudget
+        )
 
         applyLevelState(user, user.totalXp + earnedXp)
 
         val month = currentMonth()
         refreshCurrentMonthJob(user, categorySpending(userId, month), month)
         userRepository.save(user)
+
+        // 레벨이 상승한 경우 코인 보상 지급 (별도 트랜잭션)
+        val newLevel = user.level
+        if (newLevel > previousLevel) {
+            coinRewardService.grantLevelUpReward(userId, previousLevel, newLevel)
+        }
     }
 
     private fun findUser(userId: Long): User =
@@ -270,7 +285,8 @@ class UserStatsService(
         categorySpending = categorySpending,
         nickname = nickname,
         friendCode = friendCode,
-        displayName = userProfileService.displayName(this)
+        displayName = userProfileService.displayName(this),
+        coins = coins
     )
 
     private val levelThresholds = listOf(

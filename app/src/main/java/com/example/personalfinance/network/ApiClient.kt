@@ -57,6 +57,7 @@ object ApiClient {
     private var shopApi: ShopApi? = null
     private var friendApi: FriendApi? = null
     private var friendRequestApi: FriendRequestApi? = null
+    private var coinRewardApi: CoinRewardApi? = null
 
     @Synchronized
     fun getGachaApi(context: Context, tokenManager: TokenManager): GachaApi {
@@ -133,18 +134,28 @@ object ApiClient {
         return friendRequestApi!!
     }
 
+    @Synchronized
+    fun getCoinRewardApi(context: Context, tokenManager: TokenManager): CoinRewardApi {
+        getAuthApi(context, tokenManager)
+        if (coinRewardApi == null) {
+            coinRewardApi = retrofit!!.create(CoinRewardApi::class.java)
+        }
+        return coinRewardApi!!
+    }
+
     /** 로그아웃 시 호출 — 캐시된 API 인스턴스 및 Retrofit 초기화 */
     @Synchronized
     fun reset() {
-        retrofit         = null
-        authApi          = null
-        gachaApi         = null
-        classificationApi = null
-        transactionApi   = null
-        userApi          = null
+        retrofit              = null
+        authApi               = null
+        gachaApi              = null
+        classificationApi     = null
+        transactionApi        = null
+        userApi               = null
         notificationParseLogApi = null
-        shopApi          = null
-        friendApi        = null
-        friendRequestApi = null
+        shopApi               = null
+        friendApi             = null
+        friendRequestApi      = null
+        coinRewardApi         = null
     }
 }
