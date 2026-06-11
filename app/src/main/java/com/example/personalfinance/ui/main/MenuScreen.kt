@@ -51,6 +51,9 @@ fun MenuScreen(
     val levelTitle = UserStatsCalculator.levelTitle(level)
     val currentJob = UserStatsCalculator.determineJob(userStats.categorySpending)
     val jobTitle   = UserStatsCalculator.jobTitle(currentJob)
+    val navigationBarBottom = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateBottomPadding()
 
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -168,7 +171,14 @@ fun MenuScreen(
         }
 
         // ── Settings ──────────────────────────────────────────────────────────
-        Column(modifier = Modifier.padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp)) {
+        Column(
+            modifier = Modifier.padding(
+                start = 24.dp,
+                top = 0.dp,
+                end = 24.dp,
+                bottom = 24.dp + navigationBarBottom
+            )
+        ) {
             Text(
                 "설정",
                 style      = MaterialTheme.typography.bodySmall,

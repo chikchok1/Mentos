@@ -307,6 +307,10 @@ fun LedgerScreen(navController: NavController) {
         0f
     }
     val remainingBudget      = monthlyBudget - totalSpending.toLong()
+    val navigationBarBottom = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateBottomPadding()
+    val scrollBottomPadding = 32.dp + navigationBarBottom
 
     Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -371,7 +375,7 @@ fun LedgerScreen(navController: NavController) {
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(bottom = 24.dp)
+                    .padding(bottom = scrollBottomPadding)
             ) {
                 when (selectedTab) {
                     0 -> LedgerTab(
@@ -411,7 +415,7 @@ fun LedgerScreen(navController: NavController) {
             store = store,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp + navigationBarBottom)
         )
     }
 
